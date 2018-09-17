@@ -1037,6 +1037,21 @@ lemma split_preserves_none:
   by (induct arbitrary: i rule: split_induct, (fastforce simp add: nth_Cons' elim: split_comp.cases)+)
 
 
+lemma split_split_ctxs_come_from_input:
+  assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+  shows "{t. Some t \<in> set \<Gamma>} = {t. Some t \<in> set \<Gamma>1} \<union> {t. Some t \<in> set \<Gamma>2}"
+  using assms
+proof (induct rule: split.inducts)
+  case (split_cons K x a b xs as bs)
+  moreover then have
+    "x \<noteq> None \<longrightarrow> (x = a \<and> x = b) \<or> (a = None \<and> x = b) \<or> (x = a \<and> b = None)"
+    "x = None \<longrightarrow> a = None \<and> b = None"
+    by (fastforce simp add: split_comp.simps)+
+  ultimately show ?case
+    by auto
+qed simp
+
+
 lemma weakening_length:
 shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> length \<Gamma> = length \<Gamma>'"
 by (auto simp: weakening_def dest:list_all2_lengthD)
@@ -1071,11 +1086,21 @@ and           "i < length \<Gamma>"
 shows         "weakening_comp K (\<Gamma>!i) (\<Gamma>'!i)"
 using assms by (auto simp add: weakening_def dest: list_all2_nthD)
 
+lemma weakening_implies_wellformed:
+  assumes "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
+  and "Some t \<in> set \<Gamma>"
+shows "K \<turnstile> t wellformed"
+  using assms
+  unfolding weakening_def
+  by (induct rule: list_all2_induct; fastforce simp add: weakening_comp.simps)
+
+
 lemma weakening_refl:
   assumes "\<And>t. Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
   shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>"
   using assms
   by (auto simp add: weakening_def weakening_comp.simps list_all2_same)
+
 
 lemma split_weaken_comp:
   assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
