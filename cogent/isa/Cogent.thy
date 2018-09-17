@@ -797,7 +797,7 @@ proof -
   then obtain tag' t' b' where "ts' ! i = (tag', t', b')"
     using prod_cases3 by blast
   then have ts'_at_i: "ts' ! i = (tag, t, b')"
-    by (metis (no_types, lifting) ts_at_i comp_apply fst_conv i_in_bounds length_map nth_map snd_conv tags_same types_same) 
+    by (metis (no_types, lifting) ts_at_i comp_apply fst_conv i_in_bounds length_map nth_map snd_conv tags_same types_same)
   moreover have "b' \<longrightarrow> b"
   proof -
     have "snd (snd (ts' ! i)) \<longrightarrow> snd (snd (ts ! i))"
@@ -1070,6 +1070,120 @@ assumes weak: "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 and           "i < length \<Gamma>"
 shows         "weakening_comp K (\<Gamma>!i) (\<Gamma>'!i)"
 using assms by (auto simp add: weakening_def dest: list_all2_nthD)
+
+
+lemma split_weaken_comp:
+  assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    and "weakening_comp K a wa"
+  shows "\<exists>wa1 wa2. (K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2) \<and> (weakening_comp K a1 wa1) \<and> (weakening_comp K a2 wa2)"
+  using assms
+  apply (cases a1)
+   apply (fastforce simp add: split_comp.simps weakening_comp.simps)
+  apply (cases a2)
+   apply (fastforce simp add: split_comp.simps weakening_comp.simps)
+  apply (clarsimp simp add: split_comp.simps weakening_comp.simps, blast)
+  done
+
+lemma split_weaken:
+  assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+    and "K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>"
+  shows "\<exists>w\<Gamma>1 w\<Gamma>2. (K \<turnstile> w\<Gamma> \<leadsto> w\<Gamma>1 | w\<Gamma>2) \<and> (K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1) \<and> (K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2)"
+  using assms
+proof (induct \<Gamma> arbitrary: w\<Gamma> \<Gamma>1 \<Gamma>2)
+  case Nil
+  then show ?case
+    using split_length weakening_length by fastforce
+next
+  case (Cons a \<Gamma>')
+  then obtain a1 \<Gamma>1' a2 \<Gamma>2' wa w\<Gamma>'
+    where split_simps:
+      "\<Gamma>1 = a1 # \<Gamma>1'"
+      "\<Gamma>2 = a2 # \<Gamma>2'"
+      "w\<Gamma> = wa # w\<Gamma>'"
+    using weakening_def split_length
+    by (metis list.rel_distinct(2) length_0_conv neq_Nil_conv)
+
+  have prems_elims:
+    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
+    "weakening_comp K a wa"
+    using Cons.prems
+    by (fastforce elim: split.cases simp add: weakening_def split_simps)+
+  then obtain wa1 wa2
+    where weak_of_split_comps:
+      "K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+      "weakening_comp K a1 wa1"
+      "weakening_comp K a2 wa2"
+    using split_weaken_comp by blast
+
+  obtain w\<Gamma>1' w\<Gamma>2'
+    where ih_on_subctxs:
+      "K \<turnstile> w\<Gamma>' \<leadsto> w\<Gamma>1' | w\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1' \<leadsto>w w\<Gamma>1'"
+      "K \<turnstile> \<Gamma>2' \<leadsto>w w\<Gamma>2'"
+    using prems_elims Cons.hyps weakening_def split_cons prems_elims
+    by blast
+
+  have "K \<turnstile> wa # w\<Gamma>' \<leadsto> wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
+    and "K \<turnstile> a1 # \<Gamma>1' \<leadsto>w wa1 # w\<Gamma>1'"
+    and "K \<turnstile> a2 # \<Gamma>2' \<leadsto>w wa2 # w\<Gamma>2'"
+    using ih_on_subctxs weak_of_split_comps split_cons weakening_def list.rel_intros(2)
+    by metis+
+  then show ?case
+    using split_simps by blast
+qed
+
+
+lemma weaken_and_split_comp:
+  assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    and "weakening_comp K a1 wa1"
+    and "weakening_comp K a2 wa2"
+  shows "\<exists>wa. weakening_comp K a wa \<and> K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+  using assms
+  by (fastforce simp add: split_comp.simps weakening_comp.simps)
+
+lemma weaken_and_split:
+  assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+    and "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1"
+    and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
+  shows "\<exists>w\<Gamma>. (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K \<turnstile> w\<Gamma> \<leadsto> w\<Gamma>1 | w\<Gamma>2)"
+  using assms
+proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split.inducts)
+  case (split_cons K a a1 a2 \<Gamma> \<Gamma>1 \<Gamma>2)
+
+  obtain wa1 w\<Gamma>1' wa2 w\<Gamma>2'
+    where ctx_simps:
+      "w\<Gamma>1 = wa1 # w\<Gamma>1'"
+      "w\<Gamma>2 = wa2 # w\<Gamma>2'"
+    by (metis split_cons.prems list_all2_Cons1 weakening_def)
+  have subweakenings:
+    "weakening_comp K a1 wa1"
+    "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1'"
+    "weakening_comp K a2 wa2"
+    "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2'"
+    by (metis ctx_simps list.rel_inject(2) split_cons.prems weakening_def)+
+  then obtain w\<Gamma>' wa
+    where IHsplitsweakens:
+      "K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+      "K \<turnstile> w\<Gamma>' \<leadsto> w\<Gamma>1'| w\<Gamma>2'"
+      "weakening_comp K a wa"
+      "K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>'"
+    using split_cons.hyps weaken_and_split_comp
+    by blast
+  then have
+    "K \<turnstile> wa # w\<Gamma>' \<leadsto> wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
+    "K \<turnstile> a # \<Gamma> \<leadsto>w wa # w\<Gamma>'"
+    unfolding weakening_def
+    using split.split_cons weakening_def IHsplitsweakens
+    by blast+
+  then show ?case
+    using ctx_simps by blast
+qed (force simp add: weakening_def intro: split.intros)
+
+
+
+
 
 lemma typing_to_kinding :
 shows "\<Xi>, K, \<Gamma> \<turnstile>  e  : t  \<Longrightarrow> K \<turnstile>  t  wellformed"
