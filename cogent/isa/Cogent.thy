@@ -1071,6 +1071,11 @@ and           "i < length \<Gamma>"
 shows         "weakening_comp K (\<Gamma>!i) (\<Gamma>'!i)"
 using assms by (auto simp add: weakening_def dest: list_all2_nthD)
 
+lemma weakening_refl:
+  assumes "\<And>t. Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>"
+  using assms
+  by (auto simp add: weakening_def weakening_comp.simps list_all2_same)
 
 lemma split_weaken_comp:
   assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
