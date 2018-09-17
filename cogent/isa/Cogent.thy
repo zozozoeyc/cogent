@@ -1021,6 +1021,13 @@ lemma split_length:
   using assms
   by (induct rule: split_induct, force+)
 
+lemma split_bang_length:
+  assumes "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2"
+  shows "length \<Gamma> = length \<Gamma>1"
+    and "length \<Gamma> = length \<Gamma>2"
+  using assms
+  by (induct rule: split_bang.inducts, force+)
+
 lemma split_preservation_some:
   assumes splits: "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
     and idx: "\<Gamma>1 ! i = Some t \<or> \<Gamma>2 ! i = Some t"
