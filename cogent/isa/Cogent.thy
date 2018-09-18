@@ -284,16 +284,18 @@ lemmas split_cons = all3Cons[where P="split_comp K" for K, simplified split_def[
 definition pred :: "nat \<Rightarrow> nat" where
   "pred n \<equiv> (case n of Suc n' \<Rightarrow> n')"
 
-inductive split_bang :: "kind env \<Rightarrow> index set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool" where
-  split_bang_empty : "split_bang K is [] [] []"
+inductive split_bang :: "kind env \<Rightarrow> index set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool"  ("_ , _ \<turnstile> _ \<leadsto>b _ | _" [30,0,0,20] 60) where
+  split_bang_empty : "K , is \<turnstile> [] \<leadsto>b [] | []"
 | split_bang_cons  : "\<lbrakk> 0 \<notin> is
                       ; K \<turnstile> x \<leadsto> a \<parallel> b
-                      ; split_bang K (pred ` is) xs as bs
-                      \<rbrakk>  \<Longrightarrow> split_bang K is (x # xs) (a # as) (b # bs) "
+                      ; is' = pred ` is
+                      ; K , is' \<turnstile> xs \<leadsto>b as | bs
+                      \<rbrakk>  \<Longrightarrow> K , is \<turnstile> x # xs \<leadsto>b a # as | b # bs"
 | split_bang_bang  : "\<lbrakk> 0 \<in> is
-                      ; is' = Set.remove (0 :: index) is
-                      ; split_bang K (pred ` is') xs as bs
-                      \<rbrakk>  \<Longrightarrow> split_bang K is (Some x # xs) (Some (bang x) # as) (Some x # bs)"
+                      ; is' = pred ` Set.remove (0 :: index) is
+                      ; K , is' \<turnstile> xs \<leadsto>b as | bs
+                      \<rbrakk>  \<Longrightarrow> K , is \<turnstile> Some x # xs \<leadsto>b Some (bang x) # as | Some x # bs"
+
 
 
 inductive weakening_comp :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool" where
@@ -1217,10 +1219,6 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split.inducts)
   then show ?case
     using ctx_simps by blast
 qed (force simp add: weakening_def intro: split.intros)
-
-
-
-
 
 lemma typing_to_kinding :
 shows "\<Xi>, K, \<Gamma> \<turnstile>  e  : t  \<Longrightarrow> K \<turnstile>  t  wellformed"
