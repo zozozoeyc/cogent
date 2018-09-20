@@ -1013,6 +1013,23 @@ by (simp add: instantiate_ctx_def)
 
 section {* Lemmas about contexts, splitting and weakening *}
 
+lemma pred_left_inverse_Suc:
+  "pred \<circ> Suc = id"
+  using Cogent.pred_def by auto
+
+lemma pred_right_inverse_Suc_for_nonzero:
+  "x \<noteq> 0 \<Longrightarrow> (Suc \<circ> pred) x = x"
+  by (metis Cogent.pred_def comp_apply nat.case(2) not0_implies_Suc)
+
+lemma set_pred_left_inverse_suc:
+  "A = Suc ` B \<Longrightarrow> pred ` A = B"
+  by (simp add: pred_left_inverse_Suc image_comp)
+
+lemma set_pred_right_inverse_suc_for_nonzero:
+  "0 \<notin> B \<Longrightarrow> A = pred ` B \<Longrightarrow> Suc ` A = B"
+  by (metis (no_types) pred_right_inverse_Suc_for_nonzero image_comp id_apply image_cong image_id)
+
+
 lemma empty_length:
 shows "length (empty n) = n"
 by (induct n, simp_all add: empty_def)
