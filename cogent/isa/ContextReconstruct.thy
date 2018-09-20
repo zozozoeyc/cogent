@@ -55,14 +55,9 @@ lemma merge_ctx_bang_correct_on_split_bangs:
   shows "\<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
   using assms
 proof (induct rule: split_bang.inducts)
-  case (split_bang_cons "is" K x a b \<Gamma> \<Gamma>1 \<Gamma>2)
-  moreover have
-    "x = merge_ctx_comp K a b"
-    "pred ` Set.remove 0 is = pred ` is"
-    using split_bang_cons.hyps split_comp.simps 
-    by (fastforce simp add: remove_def)+
-  ultimately show ?case 
-    by simp
+  case (split_bang_cons is' "is" K xs as bs x a b)
+  then show ?case
+    by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps)
 qed simp+
 
 inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> ctx \<Rightarrow> bool"

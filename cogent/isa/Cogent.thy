@@ -284,17 +284,16 @@ lemmas split_cons = all3Cons[where P="split_comp K" for K, simplified split_def[
 definition pred :: "nat \<Rightarrow> nat" where
   "pred n \<equiv> (case n of Suc n' \<Rightarrow> n')"
 
+inductive split_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool" ("_ , _ \<turnstile> _ \<leadsto>b _ \<parallel> _") where
+  none   : "K \<turnstile> x \<leadsto> a \<parallel> b \<Longrightarrow> K , False \<turnstile> x \<leadsto>b a \<parallel> b"
+| dobang : "K , True \<turnstile> Some x \<leadsto>b Some (bang x) \<parallel> Some x"
+
 inductive split_bang :: "kind env \<Rightarrow> index set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool"  ("_ , _ \<turnstile> _ \<leadsto>b _ | _" [30,0,0,20] 60) where
   split_bang_empty : "K , is \<turnstile> [] \<leadsto>b [] | []"
-| split_bang_cons  : "\<lbrakk> 0 \<notin> is
-                      ; K \<turnstile> x \<leadsto> a \<parallel> b
-                      ; is' = pred ` is
+| split_bang_cons  : "\<lbrakk> is' = pred ` Set.remove (0 :: index) is
                       ; K , is' \<turnstile> xs \<leadsto>b as | bs
-                      \<rbrakk>  \<Longrightarrow> K , is \<turnstile> x # xs \<leadsto>b a # as | b # bs"
-| split_bang_bang  : "\<lbrakk> 0 \<in> is
-                      ; is' = pred ` Set.remove (0 :: index) is
-                      ; K , is' \<turnstile> xs \<leadsto>b as | bs
-                      \<rbrakk>  \<Longrightarrow> K , is \<turnstile> Some x # xs \<leadsto>b Some (bang x) # as | Some x # bs"
+                      ; K, (0 \<in> is) \<turnstile> x \<leadsto>b a \<parallel> b
+                      \<rbrakk> \<Longrightarrow> K , is \<turnstile> x # xs \<leadsto>b a # as | b # bs"
 
 
 
@@ -990,17 +989,19 @@ shows   "K' \<turnstile> instantiate_ctx \<delta> \<Gamma> \<leadsto> instantiat
 
 
 lemma instantiate_ctx_split_bang:
-assumes "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2"
-and     "list_all2 (kinding K') \<delta> K"
-shows   "split_bang K' is (instantiate_ctx \<delta> \<Gamma>) (instantiate_ctx \<delta> \<Gamma>1) (instantiate_ctx \<delta> \<Gamma>2)"
-using assms proof (induct rule: split_bang.induct)
-     case split_bang_empty then show ?case by (auto simp:  instantiate_ctx_def
-                                                    intro: split_bang.intros)
-next case split_bang_cons  then show ?case by (auto simp:  instantiate_ctx_def
-                                                    intro: split_bang.intros
-                                                           map_option_instantiate_split_comp)
-next case split_bang_bang  then show ?case by (auto simp: instantiate_ctx_def
-                                                    intro: split_bang.intros)
+  assumes "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2"
+    and "list_all2 (kinding K') \<delta> K"
+  shows "split_bang K' is (instantiate_ctx \<delta> \<Gamma>) (instantiate_ctx \<delta> \<Gamma>1) (instantiate_ctx \<delta> \<Gamma>2)"
+  using assms
+proof (induct rule: split_bang.induct)
+  case split_bang_empty
+  then show ?case by (auto simp: instantiate_ctx_def intro: split_bang.intros)
+next
+  case split_bang_cons
+  then show ?case
+    by (auto
+        simp: instantiate_ctx_def split_bang_comp.simps map_option_instantiate_split_comp
+        intro!: split_bang.intros)
 qed
 
 
@@ -1015,6 +1016,8 @@ section {* Lemmas about contexts, splitting and weakening *}
 lemma empty_length:
 shows "length (empty n) = n"
 by (induct n, simp_all add: empty_def)
+
+subsection {* split *}
 
 lemma split_length:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
@@ -1060,6 +1063,7 @@ proof (induct rule: split.inducts)
     by auto
 qed simp
 
+subsection {* weaken *}
 
 lemma weakening_length:
 shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> length \<Gamma> = length \<Gamma>'"
@@ -1110,6 +1114,7 @@ lemma weakening_refl:
   using assms
   by (auto simp add: weakening_def weakening_comp.simps list_all2_same)
 
+subsection {* interactions between splitting and weakening *}
 
 lemma split_weaken_comp:
   assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
@@ -1219,6 +1224,9 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split.inducts)
   then show ?case
     using ctx_simps by blast
 qed (force simp add: weakening_def intro: split.intros)
+
+
+section {* Lemmas about the Type-system *}
 
 lemma typing_to_kinding :
 shows "\<Xi>, K, \<Gamma> \<turnstile>  e  : t  \<Longrightarrow> K \<turnstile>  t  wellformed"
