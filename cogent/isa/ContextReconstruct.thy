@@ -93,7 +93,10 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; (tag, t, False) \<in> set ts
                        ; K \<turnstile>* (map (fst \<circ> snd) ts) wellformed
                        ; distinct (map fst ts)
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Con ts tag x :m TSum ts \<stileturn> \<Gamma>'"
+                       ; map fst ts = map fst ts'
+                       ; map (fst \<circ> snd) ts = map (fst \<circ> snd) ts'
+                       ; list_all2 (\<lambda>x y. snd (snd y) \<longrightarrow> snd (snd x)) ts ts'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Con ts tag x :m TSum ts' \<stileturn> \<Gamma>'"
 
 | typing_min_cast   : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> e :m TPrim (Num \<tau>) \<stileturn> \<Gamma>'
                        ; upcast_valid \<tau> \<tau>'
@@ -274,25 +277,10 @@ when we remove the \<Gamma>, we will need the full lemma, for now, we get it for
   shows "\<Xi>, K, \<Gamma> \<turnstile> e : t \<Longrightarrow> \<exists>\<Gamma>'. (\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>')"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es : ts \<Longrightarrow> \<exists>\<Gamma>'. (\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>')"
 proof (induct rule: typing_typing_all.inducts)
-case (typing_var K \<Gamma> i t \<Xi>)
-  then show ?case sorry
-next
   case (typing_afun \<Xi> f K' t u K ts \<Gamma>)
   then show ?case sorry
 next
   case (typing_fun \<Xi> K' t f u K \<Gamma> ts)
-  then show ?case sorry
-next
-  case (typing_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y b)
-  then show ?case sorry
-next
-  case (typing_con \<Xi> K \<Gamma> x t tag ts ts')
-  then show ?case sorry
-next
-  case (typing_cast \<Xi> K \<Gamma> e \<tau> \<tau>')
-  then show ?case sorry
-next
-  case (typing_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> t T u U)
   then show ?case sorry
 next
   case (typing_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u y t')
@@ -307,39 +295,12 @@ next
   case (typing_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts tag t a u b)
   then show ?case sorry
 next
-  case (typing_esac \<Xi> K \<Gamma> x ts uu t)
-  then show ?case sorry
-next
   case (typing_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x a t b)
-  then show ?case sorry
-next
-  case (typing_prim \<Xi> K \<Gamma> args ts oper t)
-  then show ?case sorry
-next
-  case (typing_lit K \<Gamma> \<Xi> l)
-  then show ?case sorry
-next
-  case (typing_unit K \<Gamma> \<Xi>)
-  then show ?case sorry
-next
-  case (typing_struct \<Xi> K \<Gamma> es ts)
-  then show ?case sorry
-next
-  case (typing_member \<Xi> K \<Gamma> e ts s k f t)
   then show ?case sorry
 next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t k taken e' u)
   then show ?case sorry
-next
-  case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t taken k e')
-  then show ?case sorry
-next
-  case (typing_all_empty \<Xi> K n)
-  then show ?case sorry
-next
-  case (typing_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t es ts)
-  then show ?case sorry
-qed
+qed (blast intro: typing_minimal_typing_minimal_all.intros)+
 
 (*  case (typing_var K \<Gamma> i t \<Xi>)
   then show ?case
