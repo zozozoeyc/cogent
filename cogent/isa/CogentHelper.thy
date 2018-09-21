@@ -93,11 +93,11 @@ lemma typing_all_empty'':
   done
 
 lemma split_bang_bang' :"\<lbrakk> 0 \<in> is
-                      ; x' = bang x
-                      ; is' = pred ` (Set.remove 0 is)
-                      ; split_bang K is' xs as bs
-                      \<rbrakk>  \<Longrightarrow> split_bang K is (Some x # xs) (Some x' # as) (Some x # bs)"
-                      by (simp only: split_bang_bang)
+                         ; x' = bang x
+                         ; is' = pred ` (Set.remove 0 is)
+                         ; split_bang K is' xs as bs
+                         \<rbrakk> \<Longrightarrow> split_bang K is (Some x # xs) (Some x' # as) (Some x # bs)"
+  by (simp only: split_bang_cons split_bang_comp.intros)
 
 definition
   type_ctx_wellformed :: "kind env \<Rightarrow> ctx \<Rightarrow> bool"
