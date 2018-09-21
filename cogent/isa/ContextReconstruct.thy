@@ -214,7 +214,7 @@ next case typing_min_put    then show ?case
 qed (auto intro: supersumption kinding_kinding_all_kinding_record.intros)
 
 
-lemma
+lemma minimal_typing_imp_weakening:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 proof (induct rule: typing_minimal_typing_minimal_all.inducts)
@@ -236,87 +236,31 @@ proof (induct rule: typing_minimal_typing_minimal_all.inducts)
     using \<Gamma>_is weaken_and_split\<Gamma> weakening_refl subrules_wellformed weakening_implies_wellformed
     by auto
 next
-  case (typing_min_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u \<Gamma>2')
-
-  obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split typing_min_tuple.hyps 
-    by blast
-  moreover then have \<Gamma>_\<Gamma>'_simps: "\<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
-          "\<Gamma>' = merge_ctx K \<Gamma>1' \<Gamma>2'"
-    by (simp add: merge_ctx_correct_on_splits typing_min_tuple.hyps)+
-  ultimately show ?case
-    by auto
-next
-  case (typing_min_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u \<Gamma>1' y t' T' U' \<Gamma>2')
-
-  have "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
-    using typing_min_split
-    by (simp add: weakening_def)
-  then obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split typing_min_split
-    by meson
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx K \<Gamma>1' \<Gamma>2'"
-    by (simp add: merge_ctx_correct_on_splits weaken_and_split\<Gamma>(2))
-
-  show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma> by fast
-next
-  case (typing_min_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2')
-
-  have weaken_\<Gamma>2:
-    "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
-    using typing_min_let
-    by (simp add: weakening_def)
-  then obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split typing_min_let
-    by meson
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx K \<Gamma>1' \<Gamma>2'"
-    by (simp add: merge_ctx_correct_on_splits weaken_and_split\<Gamma>(2))
-
-  then show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma> by fast
-next
   case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
 
   have weaken_\<Gamma>2:
     "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     using typing_min_letb
     by (simp add: weakening_def)
-  then obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split typing_min_letb
-    sorry
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx K \<Gamma>1' \<Gamma>2'"
-    by (simp add: merge_ctx_correct_on_splits weaken_and_split\<Gamma>(2))
+  then obtain \<Gamma>' isa \<Gamma>1''
+    where weaken_and_split\<Gamma>:
+      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
+      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1''"
+      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'' | \<Gamma>2'"
+    using weaken_and_split_bang typing_min_letb
+    by meson
+  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx_bang K isa \<Gamma>1'' \<Gamma>2'"
+    by (simp add: merge_ctx_bang_correct_on_split_bangs)
 
   then show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma> sorry
-
-next
-  case (typing_min_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts \<Gamma>1' tag t a u T' \<Gamma>2' b X')
-  then show ?case sorry
-next
-case (typing_min_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x \<Gamma>1' a t \<Gamma>2' b)
-  then show ?case sorry
-next
-  case (typing_min_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t k taken e' u T' X' \<Gamma>2')
-  then show ?case sorry
-next
-  case (typing_min_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t taken k e' \<Gamma>2')
-then show ?case sorry
+    using \<Gamma>'_is weaken_and_split\<Gamma>
+    sorry
 next
   case (typing_min_all_empty \<Xi> K n)
-  then show ?case sorry
-next
-  case (typing_min_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t \<Gamma>1' es ts \<Gamma>2')
-  then show ?case sorry
-qed simp+
+  then show ?case
+    by (simp add: empty_def weakening_def list_all2_same weakening_comp.none)
+qed (fastforce dest: weaken_and_split merge_ctx_correct_on_splits simp add: weakening_cons)+
+
 
 lemma minimal_typing_soundness:
 (*

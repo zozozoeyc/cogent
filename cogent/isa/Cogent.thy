@@ -1086,6 +1086,10 @@ lemma weakening_length:
 shows "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> length \<Gamma> = length \<Gamma>'"
 by (auto simp: weakening_def dest:list_all2_lengthD)
 
+lemma weakening_cons:
+shows "K \<turnstile> x # \<Gamma> \<leadsto>w x' # \<Gamma>' \<longleftrightarrow> weakening_comp K x x' \<and> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
+  by (auto simp: weakening_def)
+
 lemma weakening_preservation_some:
 assumes weak: "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 and     idx:  "\<Gamma>' ! x = Some t"
