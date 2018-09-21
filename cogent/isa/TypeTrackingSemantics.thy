@@ -191,26 +191,28 @@ lemma split_bang_nth:
         \<and> (\<forall>i < length \<Gamma>. if i \<in> is then \<Gamma>2 ! i = \<Gamma> ! i \<and> \<Gamma> ! i \<noteq> None
                 \<and> \<Gamma>1 ! i = map_option bang (\<Gamma> ! i)
             else split_comp K (\<Gamma> ! i) (\<Gamma>1 ! i) (\<Gamma>2 ! i)))"
-  apply (induct \<Gamma> arbitrary: "is" \<Gamma>1 \<Gamma>2)
-   apply (auto elim: split_bang.cases intro: split_bang_empty)[1]
-  apply (rule iffI)
-   apply (erule split_bang.cases, simp)
-    apply clarsimp
-    apply (case_tac i)
-     apply simp
-    apply (simp add: Suc_mem_image_pred cong: if_cong)
-   apply clarsimp
-   apply (case_tac i)
-    apply simp
-   apply (simp add: Suc_mem_image_pred_remove cong: if_cong)
-  apply (clarsimp simp: length_Suc_conv forall_less_Suc_eq)
-  apply (frule_tac x=0 in spec, simp(no_asm_use))
-  apply (case_tac "0 \<in> is", simp_all)
-   apply clarsimp
-   apply (erule split_bang_bang, rule refl)
-   apply (simp add: Suc_mem_image_pred_remove cong: if_cong)
-  apply (rule split_bang_cons, (simp_all add: Suc_mem_image_pred cong: if_cong))
-  done
+proof (induct \<Gamma> arbitrary: \<Gamma>1 \<Gamma>2 "is")
+  case Nil
+  then show ?case
+    using split_bang_empty split_bang_length by fastforce
+next
+  case (Cons a \<Gamma>')
+  then show ?case
+    apply -
+    apply (drule_tac x="pred ` Set.remove 0 is" in meta_spec)
+    apply (subst split_bang.simps)
+    apply (clarsimp simp add: Suc_mem_image_pred_remove)
+    apply (rule iffI)
+     apply (clarsimp, rename_tac \<Gamma>1' \<Gamma>2' a1 a2 i)
+     apply (case_tac i)
+      apply (auto simp add: split_bang_comp.simps)[2]
+    apply (clarsimp simp add: length_Suc_conv, rename_tac a1 \<Gamma>1' a2 \<Gamma>2')
+    apply (rule conjI)
+     apply auto[1]
+    apply (fastforce simp add: split_bang_comp.simps)
+    done
+qed
+ 
 
 lemma ttsplit_bang_imp_split_bang:
   "ttsplit_bang is sps K \<Gamma> xs \<Gamma>1 ys \<Gamma>2 \<Longrightarrow>
@@ -239,16 +241,20 @@ lemma split_bang_imp_ttsplit:
         (tt, \<Gamma>1') ys (tt2, \<Gamma>2'))"
   apply (clarsimp simp: ttsplit_bang_def)
   apply (induct rule: split_bang.induct)
-    apply (simp add: ttsplit_bang_def ttsplit_bang_inner_def)
-   apply (clarsimp simp: forall_less_Suc_eq Suc_mem_image_pred)
-   apply (rule exI, rule conjI, erule_tac sp="if a = None then None
-        else if b = None then Some TSK_L else Some TSK_S" in ttsplit_bang_inner_Cons)
-    apply (auto simp: ttsplit_bang_inner_def elim!: split_comp.cases)[1]
-   apply (simp add: Set.remove_def)
-  apply (clarsimp simp: forall_less_Suc_eq Suc_mem_image_pred_remove)
+   apply (simp add: ttsplit_bang_def ttsplit_bang_inner_def)
+  apply (clarsimp, rename_tac isa K \<Gamma>' \<Gamma>1' \<Gamma>2' a a1 a2 isb)
+  apply (erule split_bang_comp.cases)
+   apply (rule exI, rule conjI)
+    apply (erule_tac sp="if a1 = None
+                        then None
+                        else (if a2 = None then Some TSK_L else Some TSK_S)"
+      in ttsplit_bang_inner_Cons)
+    apply (erule split_comp.cases)
+       apply (auto simp: ttsplit_bang_inner_def)[4]
+   apply (clarsimp simp: forall_less_Suc_eq Suc_mem_image_pred_remove)
   apply (rule exI, rule conjI, erule_tac sp="Some TSK_NS" in ttsplit_bang_inner_Cons)
    apply (simp add: ttsplit_bang_inner_def)
-  apply simp
+  apply (clarsimp simp: forall_less_Suc_eq Suc_mem_image_pred_remove)
   done
 
 lemma split_follow_typing_tree:
@@ -892,7 +898,7 @@ lemma split_bang_type_wellformed:
   "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2 \<Longrightarrow> Some t \<in> set \<Gamma>
     \<Longrightarrow> Some t \<in> set \<Gamma>1 \<or> Some t \<in> set \<Gamma>2 \<or> K \<turnstile> t wellformed"
   by (induct arbitrary: "is" rule: split_bang.induct,
-    auto elim!: split_comp.cases)
+    auto elim!: split_comp.cases split_bang_comp.cases)
 
 lemma weakening_type_wellformed:
   "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<Longrightarrow> Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
