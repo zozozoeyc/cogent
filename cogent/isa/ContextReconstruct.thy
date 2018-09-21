@@ -17,7 +17,7 @@ fun merge_ctx :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx
   "merge_ctx _ [] [] = []"
 | "merge_ctx K (optx # \<Gamma>1) (opty # \<Gamma>2) = merge_ctx_comp K optx opty # merge_ctx K \<Gamma>1 \<Gamma>2"
 
-lemma merge_ctx_correct_on_splits:
+lemma merge_ctx_correct:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
   shows "\<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
   using assms
@@ -50,8 +50,8 @@ fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Righta
                                                         # merge_ctx_bang K is' \<Gamma>1 \<Gamma>2)"
 
 
-lemma merge_ctx_bang_correct_on_split_bangs:
-  assumes "split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2"
+lemma merge_ctx_bang_correct:
+  assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
   shows "\<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
   using assms
 proof (induct rule: split_bang.inducts)
@@ -59,6 +59,9 @@ proof (induct rule: split_bang.inducts)
   then show ?case
     by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps)
 qed simp+
+
+
+section {* minimal typing *}
 
 inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env \<Rightarrow> ctx \<Rightarrow> 'f expr \<Rightarrow> type \<Rightarrow> ctx \<Rightarrow> bool"
           ("_, _, _ \<turnstile> _ :m _ \<stileturn> _" [30,0,0,0,0,20] 60)
@@ -225,7 +228,7 @@ proof (induct rule: typing_minimal_typing_minimal_all.inducts)
     using weaken_and_split typing_min_app.hyps 
     by blast
   then have \<Gamma>_is: "\<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
-    by (simp add: merge_ctx_correct_on_splits typing_min_app.hyps)
+    by (simp add: merge_ctx_correct typing_min_app.hyps)
 
   have subrules_wellformed:
     "\<And>y. Some y \<in> set \<Gamma>1 \<Longrightarrow> K \<turnstile> y wellformed"
@@ -242,15 +245,15 @@ next
     "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     using typing_min_letb
     by (simp add: weakening_def)
-  then obtain \<Gamma>' isa \<Gamma>1''
+  then obtain \<Gamma>' isa \<Gamma>1'3
     where weaken_and_split\<Gamma>:
       "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1''"
-      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'' | \<Gamma>2'"
+      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1'3"
+      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'3 | \<Gamma>2'"
     using weaken_and_split_bang typing_min_letb
     by meson
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx_bang K isa \<Gamma>1'' \<Gamma>2'"
-    by (simp add: merge_ctx_bang_correct_on_split_bangs)
+  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
+    by (simp add: merge_ctx_bang_correct)
 
   then show ?case
     using \<Gamma>'_is weaken_and_split\<Gamma>
@@ -259,7 +262,7 @@ next
   case (typing_min_all_empty \<Xi> K n)
   then show ?case
     by (simp add: empty_def weakening_def list_all2_same weakening_comp.none)
-qed (fastforce dest: weaken_and_split merge_ctx_correct_on_splits simp add: weakening_cons)+
+qed (fastforce dest: weaken_and_split merge_ctx_correct simp add: weakening_cons)+
 
 
 lemma minimal_typing_soundness:
