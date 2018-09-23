@@ -1030,9 +1030,13 @@ lemma set_pred_right_inverse_suc_for_nonzero:
   by (metis (no_types) pred_right_inverse_Suc_for_nonzero image_comp id_apply image_cong image_id)
 
 
-lemma empty_length:
-shows "length (empty n) = n"
-by (induct n, simp_all add: empty_def)
+lemma empty_length[simp]:
+  "length (empty n) = n"
+  unfolding empty_def by simp
+
+lemma singleton_length[simp]: "length (singleton n i t) = n"
+  unfolding singleton_def by simp
+
 
 subsection {* split *}
 
@@ -1090,6 +1094,14 @@ lemma weakening_cons:
 shows "K \<turnstile> x # \<Gamma> \<leadsto>w x' # \<Gamma>' \<longleftrightarrow> weakening_comp K x x' \<and> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
   by (auto simp: weakening_def)
 
+lemma weakening_update:
+  assumes  "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
+    and "weakening_comp K x y"
+  shows "K \<turnstile> \<Gamma>[i := x] \<leadsto>w \<Gamma>'[i := y]"
+  using assms
+  unfolding weakening_def
+  by (simp add: list_all2_update_cong)
+
 lemma weakening_preservation_some:
 assumes weak: "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 and     idx:  "\<Gamma>' ! x = Some t"
@@ -1122,12 +1134,11 @@ using assms by (auto simp add: weakening_def dest: list_all2_nthD)
 
 lemma weakening_implies_wellformed:
   assumes "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-  and "Some t \<in> set \<Gamma>"
-shows "K \<turnstile> t wellformed"
+  shows "Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
+  and "Some t \<in> set \<Gamma>' \<Longrightarrow> K \<turnstile> t wellformed"
   using assms
   unfolding weakening_def
-  by (induct rule: list_all2_induct; fastforce simp add: weakening_comp.simps)
-
+  by (induct rule: list_all2_induct, (fastforce simp add: weakening_comp.simps)+)
 
 lemma weakening_refl:
   assumes "\<And>t. Some t \<in> set \<Gamma> \<Longrightarrow> K \<turnstile> t wellformed"
