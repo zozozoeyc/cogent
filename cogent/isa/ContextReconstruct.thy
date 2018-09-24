@@ -3,8 +3,6 @@ theory ContextReconstruct
 begin
 
 section {* Functions for merging split contexts *}
-text {* These will give back undefined-s in strange places if the contexts can't actually be merged. *}
-
 
 (* The inner layer of option is whether the type is present in the context.
    The outer layer is whether the merge succeeded *)
@@ -26,7 +24,7 @@ fun merge_ctx :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx
 | "merge_ctx a (v # va) [] = None"
 | "merge_ctx a [] (v # va) = None" 
 
-lemma merge_ctx_correct:
+lemma split_imp_merge_ctx:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
   shows "Some \<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
   using assms
@@ -48,6 +46,29 @@ next
     using Cons.hyps
     by (auto simp add: split_comp.simps option_cases_boolean)
 qed
+
+lemma merge_ctx_comp_imp_split_comp:
+  assumes "\<And>t. a = Some t \<Longrightarrow> K \<turnstile> t wellformed"
+  and "\<And>t. b = Some t \<Longrightarrow> K \<turnstile> t wellformed"
+and "merge_ctx_comp K a b = Some c"
+shows "K \<turnstile> c \<leadsto> a \<parallel> b"
+  using assms
+  by (cases c; cases a; cases b; simp add: split_comp.simps if_split_eq1; blast)
+
+lemma merge_ctx_imp_split:
+  assumes "\<And>a. Some a \<in> set \<Gamma>1 \<Longrightarrow> K \<turnstile> a wellformed"
+    and "\<And>a. Some a \<in> set \<Gamma>2 \<Longrightarrow> K \<turnstile> a wellformed"
+    and "merge_ctx K \<Gamma>1 \<Gamma>2 = Some \<Gamma>"
+  shows "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+  using assms
+proof (induct arbitrary: \<Gamma> rule: merge_ctx.induct)
+  case (2 K optx \<Gamma>1 opty \<Gamma>2)
+  moreover then obtain g \<Gamma>' where "\<Gamma> = g # \<Gamma>'"
+    by (simp add: option_cases_boolean, blast)
+  ultimately show ?case
+    using split_cons
+    by (simp add: option_cases_boolean merge_ctx_comp_imp_split_comp)
+qed (simp add: split.intros)+
 
 fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
   "merge_ctx_bang_comp K False optx opty = merge_ctx_comp K optx opty"
@@ -95,10 +116,11 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; K \<turnstile> \<Gamma> \<leadsto>w empty (length \<Gamma>) (* correctness *)
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> AFun f ts :m instantiate ts (TFun t u) \<stileturn> empty (length \<Gamma>)"
 
-| typing_min_fun    : "\<lbrakk> \<Xi>, K', [Some t] \<turnstile> f :m u \<stileturn> [Some t]
+| typing_min_fun    : "\<lbrakk> \<Xi>, K', [Some t] \<turnstile> f :m u \<stileturn> \<Gamma>'
                        ; K' \<turnstile> t wellformed
                        ; list_all2 (kinding K) ts K'
                        ; K \<turnstile> \<Gamma> \<leadsto>w empty (length \<Gamma>) (* correctness *)
+                       ; K'\<turnstile> [Some t] \<leadsto>w \<Gamma>' (* correctness *)
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Fun f ts :m instantiate ts (TFun t u) \<stileturn> empty (length \<Gamma>)"
 
 | typing_min_app    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
@@ -223,7 +245,6 @@ proof (induct rule: typing_minimal_typing_minimal_all.inducts)
   case typing_min_var then show ?case
     by (fastforce
         dest: weakening_preservation_some weakening_nth
-        simp: empty_length
         elim: weakening_comp.cases)
 next case typing_min_fun    then show ?case
     by (fastforce intro: kinding_kinding_all_kinding_record.intros substitutivity)
@@ -274,7 +295,68 @@ next
   case (typing_min_all_empty \<Xi> K n)
   then show ?case
     by (simp add: empty_def weakening_def list_all2_same weakening_comp.none)
-qed (fastforce dest: weaken_and_split merge_ctx_correct simp add: weakening_cons)+
+qed (fastforce dest: weaken_and_split split_imp_merge_ctx simp add: weakening_cons)+
+
+(* unnecessary once the proper soundness lemma is proven *)
+lemma minimal_typing_preserves_ctx_length:
+  shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> length \<Gamma> = length \<Gamma>'"
+    and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> length \<Gamma> = length \<Gamma>'"
+proof (induct rule: typing_minimal_typing_minimal_all.inducts)
+  case (typing_min_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y \<Gamma>1' b \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u \<Gamma>1' y t' T' U' \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts \<Gamma>1' tag t a u T' \<Gamma>2' b X')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_esac \<Xi> K \<Gamma> x ts \<Gamma>' uu t)
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x \<Gamma>1' a t \<Gamma>2' b)
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t k taken e' u T' X' \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t taken k e' \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+next
+  case (typing_min_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t \<Gamma>1' es ts \<Gamma>2')
+  then show ?case
+    using minimal_typing_imp_weakening
+    by (blast intro: typing_minimal_typing_minimal_all.intros dest: weakening_length)
+qed (auto intro: typing_minimal_typing_minimal_all.intros dest: split_imp_merge_ctx weakening_length)+
 
 
 lemma minimal_typing_soundness:
@@ -287,31 +369,106 @@ when we remove the \<Gamma>, we will need the full lemma, for now, we get it for
     and "\<Xi>, K, \<Gamma> \<turnstile>* es : ts \<Longrightarrow> \<exists>\<Gamma>'. (\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>')"
 proof (induct rule: typing_typing_all.inducts)
   case (typing_afun \<Xi> f K' t u K ts \<Gamma>)
-  then show ?case sorry
+  then show ?case
+    using is_consumed_def by (blast intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_fun \<Xi> K' t f u K \<Gamma> ts)
-  then show ?case sorry
+  then show ?case
+    using is_consumed_def
+    by (auto
+        simp del: instantiate.simps
+        intro: minimal_typing_imp_weakening
+        intro!: typing_minimal_typing_minimal_all.intros exI[where x="Cogent.empty (length \<Gamma>)"])
 next
   case (typing_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y b)
-  then show ?case sorry
+  moreover then obtain \<Gamma>1' \<Gamma>2'
+    where
+      "\<Xi>, K, \<Gamma>1 \<turnstile> a :m TFun x y \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, \<Gamma>2 \<turnstile> b :m x \<stileturn> \<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    using typing_app weaken_and_split by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> t T u U)
-  then show ?case sorry
+  moreover then obtain \<Gamma>1' \<Gamma>2'
+    where
+      "\<Xi>, K, \<Gamma>1 \<turnstile> t :m T \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, \<Gamma>2 \<turnstile> u :m U \<stileturn> \<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    using typing_tuple weaken_and_split by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u y t')
-  then show ?case sorry
+  moreover then obtain \<Gamma>1' TU\<Gamma>2'
+    where IHresults:
+      "\<Xi>, K, \<Gamma>1 \<turnstile> x :m TProduct t u \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, Some t # Some u # \<Gamma>2 \<turnstile> y :m t' \<stileturn> TU\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> Some t # Some u # \<Gamma>2 \<leadsto>w TU\<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain T U \<Gamma>2'
+    where ctx2_simps:
+      "TU\<Gamma>2' = T # U # \<Gamma>2'"
+      "weakening_comp K (Some t) T"
+      "weakening_comp K (Some u) U"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    by (metis list_all2_Cons1 weakening_def)
+  moreover obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    using IHresults ctx2_simps typing_split weaken_and_split
+    by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
-case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
-  then show ?case sorry
+  case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
+  then show ?case
+    using minimal_typing_preserves_ctx_length
+    sorry
 next
   case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
-  then show ?case sorry
+  then show ?case
+    using minimal_typing_preserves_ctx_length
+    sorry
 next
   case (typing_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts tag t a u b)
-  then show ?case sorry
+  then show ?case
+    apply clarsimp
+    apply (rename_tac \<Gamma>1' T\<Gamma>2a T\<Gamma>2b)
+    apply (subgoal_tac "length T\<Gamma>2a = Suc (length \<Gamma>2)")
+    apply (subgoal_tac "length T\<Gamma>2b = Suc (length \<Gamma>2)")
+     apply (clarsimp simp add: length_Suc_conv)
+      apply (rename_tac T Xs \<Gamma>2a' \<Gamma>2b')
+      apply (subgoal_tac "\<Gamma>2a' = \<Gamma>2b'")
+    sorry
+(*
+       apply (blast intro: typing_minimal_typing_minimal_all.intros)
+      defer    
+    using minimal_typing_preserves_ctx_length(1) apply (force+)[2]
+    sorry
+*)
 next
   case (typing_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x a t b)
-  then show ?case sorry
+  then show ?case
+    apply clarsimp
+    apply (rename_tac \<Gamma>1' \<Gamma>2a \<Gamma>2b)
+    apply (subgoal_tac "\<Gamma>2a = \<Gamma>2b")
+(*
+     apply (blast intro: typing_minimal_typing_minimal_all.intros)
+*)
+    sorry
 next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t k taken e' u)
   then show ?case sorry
@@ -324,114 +481,54 @@ next
 
 qed (blast intro: typing_minimal_typing_minimal_all.intros)+
 
-(*  case (typing_var K \<Gamma> i t \<Xi>)
-  then show ?case
-    using typing_min_var by blast
-next
-  case (typing_afun \<Xi> f K' t u K ts \<Gamma>)
-  then have "\<Xi>, K, \<Gamma> \<turnstile> AFun f ts :m instantiate ts (TFun t u) \<stileturn> Cogent.empty (length \<Gamma>)"
-    using typing_min_afun by fast
-  then show ?case
-    using typing_afun is_consumed_def by blast
-next
-  case (typing_fun \<Xi> K' t f u K \<Gamma> ts)
-  then have "\<Xi>, K, \<Gamma> \<turnstile> Fun f ts :m instantiate ts (TFun t u) \<stileturn> Cogent.empty (length \<Gamma>)"
-    using typing_min_fun by fast
-  then show ?case
-    using typing_fun is_consumed_def by blast
-next
-  case (typing_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y b)
-  then show ?case sorry
-next
-  case (typing_con \<Xi> K \<Gamma> x t tag ts)
-  then show ?case sorry
-next
-  case (typing_cast \<Xi> K \<Gamma> e \<tau> \<tau>')
-  then show ?case sorry
-next
-  case (typing_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> t T u U)
-  then show ?case sorry
-next
-  case (typing_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u y t')
-
-  obtain \<Gamma>1' TU\<Gamma>2'
-    where weakened_subctxs:
-      "\<Xi>, K, \<Gamma>1 \<turnstile> x :m TProduct t u \<stileturn> \<Gamma>1'"
-      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
-      "\<Xi>, K, Some t # Some u # \<Gamma>2 \<turnstile> y :m t' \<stileturn> TU\<Gamma>2'"
-      "K \<turnstile> Some t # Some u # \<Gamma>2 \<leadsto>w TU\<Gamma>2'"
-    using typing_split
-    by fast
-  then obtain T' U' \<Gamma>2'
-    where subctx2_simps:
-      "TU\<Gamma>2' = T' # U' # \<Gamma>2'"
-      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
-    by (metis list_all2_Cons1 weakening_def)
-  
-  obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split weakened_subctxs subctx2_simps typing_split
-    by meson
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx K \<Gamma>1' \<Gamma>2'"
-    by (simp add: merge_ctx_correct weaken_and_split\<Gamma>(2))
-
-  have "\<Xi>, K, \<Gamma> \<turnstile> Split x y :m t' \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
-    using typing_min_split typing_split weakened_subctxs subctx2_simps
-    by blast
-  then show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma>
-    by fast
-next
-  case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
-  then show ?case sorry
-next
-  case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
-  then show ?case sorry
-next
-  case (typing_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts tag t a u b)
-  then show ?case sorry
-next
-  case (typing_esac \<Xi> K \<Gamma> x ts uu t)
-  then show ?case sorry
-next
-  case (typing_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x a t b)
-  then show ?case sorry
-next
-  case (typing_prim \<Xi> K \<Gamma> args ts oper t)
-  then show ?case sorry
-next
-  case (typing_lit K \<Gamma> \<Xi> l)
-  then show ?case sorry
-next
-  case (typing_unit K \<Gamma> \<Xi>)
-  then show ?case sorry
-next
-  case (typing_struct \<Xi> K \<Gamma> es ts)
-  then show ?case sorry
-next
-  case (typing_member \<Xi> K \<Gamma> e ts s k f t)
-  then show ?case sorry
-next
-  case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t k taken e' u)
-  then show ?case sorry
-next
-  case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t taken k e')
-  then show ?case sorry
-next
-  case (typing_all_empty \<Xi> K n)
-  then show ?case sorry
-next
-  case (typing_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t es ts)
-  then show ?case sorry
-qed
-*)
 
 lemma minimal_typing_completeness:
-  assumes "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>'"
-  shows "\<Xi>, K, \<Gamma> \<turnstile> e : t"
-    and "\<Xi>, K, \<Gamma>' \<turnstile> e : t"
-  sorry
+  shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> \<Xi>, K, \<Gamma>' \<turnstile> e : t"
+  and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> \<Xi>, K, \<Gamma>' \<turnstile>* es : ts"
+proof (induct rule: typing_minimal_typing_minimal_all.inducts)
+  case (typing_min_fun \<Xi> K' t f u \<Gamma>' K ts \<Gamma>)
+  moreover have "\<Gamma>' = [Some t] \<or> \<Gamma>' = [None]"
+    by (metis length_0_conv list_all2_Cons1 typing_min_fun.hyps(6) weakening_comp.cases weakening_def weakening_length)
+  ultimately show ?case
+    apply (auto simp del: instantiate.simps intro: weakening_implies_wellformed weakening_refl intro!: typing_typing_all.intros)
+      defer
+      apply (auto simp del: instantiate.simps intro: weakening_implies_wellformed weakening_refl intro!: typing_typing_all.intros)
+    sorry
+next
+  case (typing_min_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y \<Gamma>1' b \<Gamma>2' \<Gamma>')
+  then show ?case
+    apply (auto simp del: instantiate.simps intro: weakening_implies_wellformed weakening_refl intro!: typing_typing_all.intros)
+    using merge_ctx_imp_split minimal_typing_imp_weakening(1) weakening_implies_wellformed(2)
+    by blast
+next
+  case (typing_min_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u \<Gamma>1' y t' T' U' \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts \<Gamma>1' tag t a u T' \<Gamma>2' b X' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x \<Gamma>1' a t \<Gamma>2' b \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t k taken e' u T' X' \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s \<Gamma>1' f t taken k e' \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+next
+  case (typing_min_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t \<Gamma>1' es ts \<Gamma>2' \<Gamma>')
+  then show ?case sorry
+qed (fastforce intro: weakening_implies_wellformed weakening_refl intro!: typing_typing_all.intros)+
+
 
 lemma minimal_typing_generates_minimal_weakened:
   assumes "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>'"
