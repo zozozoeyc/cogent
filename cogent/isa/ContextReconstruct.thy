@@ -78,7 +78,7 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; K \<turnstile> \<Gamma> \<leadsto>w empty (length \<Gamma>) (* correctness *)
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> AFun f ts :m instantiate ts (TFun t u) \<stileturn> empty (length \<Gamma>)"
 
-| typing_min_fun    : "\<lbrakk> \<Xi>, K', [Some t] \<turnstile> f :m u \<stileturn> \<Gamma>1'
+| typing_min_fun    : "\<lbrakk> \<Xi>, K', [Some t] \<turnstile> f :m u \<stileturn> [Some t]
                        ; K' \<turnstile> t wellformed
                        ; list_all2 (kinding K) ts K'
                        ; K \<turnstile> \<Gamma> \<leadsto>w empty (length \<Gamma>) (* correctness *)
@@ -87,7 +87,7 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
 | typing_min_app    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> a :m TFun x y \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> b :m x \<stileturn> \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> App a b :m y \<stileturn> merge_ctx K \<Gamma>1 \<Gamma>2"
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> App a b :m y \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
 
 | typing_min_con    : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> x :m t \<stileturn> \<Gamma>'
                        ; (tag, t, False) \<in> set ts
@@ -224,24 +224,6 @@ lemma minimal_typing_imp_weakening:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 proof (induct rule: typing_minimal_typing_minimal_all.inducts)
-  case (typing_min_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y \<Gamma>1' b \<Gamma>2')
-
-  obtain \<Gamma>' where weaken_and_split\<Gamma>:
-    "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using weaken_and_split typing_min_app.hyps 
-    by blast
-  then have \<Gamma>_is: "\<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
-    by (simp add: merge_ctx_correct typing_min_app.hyps)
-
-  have subrules_wellformed:
-    "\<And>y. Some y \<in> set \<Gamma>1 \<Longrightarrow> K \<turnstile> y wellformed"
-    "\<And>y. Some y \<in> set \<Gamma>2 \<Longrightarrow> K \<turnstile> y wellformed"
-    using typing_min_app.hyps weakening_implies_wellformed by force+
-
-  show ?case
-    using \<Gamma>_is weaken_and_split\<Gamma> weakening_refl subrules_wellformed weakening_implies_wellformed
-    by auto
-next
   case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
 
   have weaken_\<Gamma>2:
