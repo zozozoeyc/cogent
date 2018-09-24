@@ -242,6 +242,9 @@ lemma list_all3_product_over_list_all2:
 
 section {* Misc lemmas *}
 
+lemma option_cases_boolean: "(y = (case ox of Some x \<Rightarrow> P x | None \<Rightarrow> Q)) = ((\<exists>x. ox = Some x \<and> y = P x) \<or> (ox = None \<and> y = Q))"
+  using option.case_eq_if by auto
+
 lemma distinct_fst:
   assumes "distinct (map fst xs)"
     and     "(a, b) \<in> set xs"

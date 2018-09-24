@@ -5,21 +5,30 @@ begin
 section {* Functions for merging split contexts *}
 text {* These will give back undefined-s in strange places if the contexts can't actually be merged. *}
 
-fun merge_ctx_comp :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option" where
-  "merge_ctx_comp K (Some x) (Some y) = (if (x = y) \<and> (\<exists>k. K \<turnstile> x :\<kappa> k \<and> S \<in> k)
-                                              then Some x
-                                              else undefined)"
-| "merge_ctx_comp K (Some x) (None) = Some x"
-| "merge_ctx_comp K (None) (Some y) = Some y"
-| "merge_ctx_comp K (None) (None) = None"
 
-fun merge_ctx :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx" where
-  "merge_ctx _ [] [] = []"
-| "merge_ctx K (optx # \<Gamma>1) (opty # \<Gamma>2) = merge_ctx_comp K optx opty # merge_ctx K \<Gamma>1 \<Gamma>2"
+(* The inner layer of option is whether the type is present in the context.
+   The outer layer is whether the merge succeeded *)
+fun merge_ctx_comp :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
+  "merge_ctx_comp K (Some x) (Some y) = (if (x = y) \<and> (\<exists>k. K \<turnstile> x :\<kappa> k \<and> S \<in> k)
+                                              then Some (Some x)
+                                              else None)"
+| "merge_ctx_comp K (Some x) (None) = Some (Some x)"
+| "merge_ctx_comp K (None) (Some y) = Some (Some y)"
+| "merge_ctx_comp K (None) (None) = Some (None)"
+
+fun merge_ctx :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
+  "merge_ctx _ [] [] = Some []"
+| "merge_ctx K (optx # \<Gamma>1) (opty # \<Gamma>2) = (case (merge_ctx_comp K optx opty) of
+                                            (Some a) \<Rightarrow> (case (merge_ctx K \<Gamma>1 \<Gamma>2) of
+                                                             (Some rest) \<Rightarrow> Some (a # rest)
+                                                           | None \<Rightarrow> None)
+                                          | None \<Rightarrow> None)"
+| "merge_ctx a (v # va) [] = None"
+| "merge_ctx a [] (v # va) = None" 
 
 lemma merge_ctx_correct:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
-  shows "\<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
+  shows "Some \<Gamma> = merge_ctx K \<Gamma>1 \<Gamma>2"
   using assms
 proof (induct \<Gamma> arbitrary: \<Gamma>1 \<Gamma>2)
   case Nil
@@ -36,28 +45,36 @@ next
     using Cons.prems
     by (cases rule: split.cases, simp)
   then show ?case
-    using Cons.hyps split_comp.simps by auto
+    using Cons.hyps
+    by (auto simp add: split_comp.simps option_cases_boolean)
 qed
 
-fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option" where
+fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
   "merge_ctx_bang_comp K False optx opty = merge_ctx_comp K optx opty"
-| "merge_ctx_bang_comp K True (Some x) (Some y) = (if x = bang y then Some y else undefined)"
+| "merge_ctx_bang_comp K True (Some x) (Some y) = (if x = bang y then Some (Some y) else None)"
+| "merge_ctx_bang_comp _ True None _    = None"
+| "merge_ctx_bang_comp _ True _    None = None"
 
-fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx" where
-  "merge_ctx_bang K is [] [] = []"
+fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
+  "merge_ctx_bang K is [] [] = Some []"
 | "merge_ctx_bang K is (optx # \<Gamma>1) (opty # \<Gamma>2) = (let is' = pred ` Set.remove (0 :: index) is
-                                                      in merge_ctx_bang_comp K (0 \<in> is) optx opty
-                                                        # merge_ctx_bang K is' \<Gamma>1 \<Gamma>2)"
+                                                      in (case merge_ctx_bang_comp K (0 \<in> is) optx opty of
+                                                            Some a \<Rightarrow> (case merge_ctx_bang K is' \<Gamma>1 \<Gamma>2 of
+                                                                         Some rest \<Rightarrow> Some (a # rest)
+                                                                       | None \<Rightarrow> None)
+                                                          | None \<Rightarrow> None))"
+| "merge_ctx_bang a b (v # va) [] = None"
+| "merge_ctx_bang a b [] (v # va) = None" 
 
 
 lemma merge_ctx_bang_correct:
   assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
-  shows "\<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
+  shows "Some \<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
   using assms
 proof (induct rule: split_bang.inducts)
   case (split_bang_cons is' "is" K xs as bs x a b)
   then show ?case
-    by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps)
+    by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps option_cases_boolean)
 qed simp+
 
 
@@ -87,7 +104,8 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
 | typing_min_app    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> a :m TFun x y \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> b :m x \<stileturn> \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> App a b :m y \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> App a b :m y \<stileturn> \<Gamma>'"
 
 | typing_min_con    : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> x :m t \<stileturn> \<Gamma>'
                        ; (tag, t, False) \<in> set ts
@@ -105,31 +123,36 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
 | typing_min_tuple  : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> y :m u \<stileturn> \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Tuple x y :m TProduct t u \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Tuple x y :m TProduct t u \<stileturn> \<Gamma>'"
 
 | typing_min_split  : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m TProduct t u \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, (Some t)#(Some u)#\<Gamma>2 \<turnstile> y :m t' \<stileturn> T' # U' # \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Split x y :m t' \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Split x y :m t' \<stileturn> \<Gamma>'"
 
 | typing_min_let    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, (Some t # \<Gamma>2) \<turnstile> y :m u \<stileturn> T' # \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Let x y :m u \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Let x y :m u \<stileturn> \<Gamma>'"
 
 | typing_min_letb   : "\<lbrakk> split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, (Some t # \<Gamma>2) \<turnstile> y :m u \<stileturn> T' # \<Gamma>2'
                        ; K \<turnstile> t :\<kappa> k
                        ; E \<in> k
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> LetBang is x y :m u \<stileturn> merge_ctx_bang K is \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx_bang K is \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> LetBang is x y :m u \<stileturn> \<Gamma>'"
 
 | typing_min_case   : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m TSum ts \<stileturn> \<Gamma>1'
                        ; (tag, (t,False)) \<in> set ts
                        ; \<Xi>, K, (Some t # \<Gamma>2) \<turnstile> a :m u \<stileturn> T' # \<Gamma>2'
                        ; \<Xi>, K, (Some (TSum (tagged_list_update tag (t, True) ts)) # \<Gamma>2) \<turnstile> b :m u \<stileturn> X' # \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Case x tag a b :m u \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Case x tag a b :m u \<stileturn> \<Gamma>'"
 
 | typing_min_esac   : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile> x :m TSum ts \<stileturn> \<Gamma>'
                        ; [(_, (t,False))] = filter (HOL.Not \<circ> snd \<circ> snd) ts
@@ -139,7 +162,8 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m TPrim Bool \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> a :m t \<stileturn> \<Gamma>2'
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> b :m t \<stileturn> \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> If x a b :m t \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> If x a b :m t \<stileturn> \<Gamma>'"
 
 | typing_min_prim   : "\<lbrakk> \<Xi>, K, \<Gamma> \<turnstile>* args :m map TPrim ts \<stileturn> \<Gamma>'
                        ; prim_op_type oper = (ts,t)
@@ -169,7 +193,8 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; K \<turnstile> t :\<kappa> k
                        ; S \<in> k \<or> taken
                        ; \<Xi>, K, (Some t # Some (TRecord (ts [f := (t,taken)]) s) # \<Gamma>2) \<turnstile> e' :m u \<stileturn> T' # X' # \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Take e f e' :m u \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Take e f e' :m u \<stileturn> \<Gamma>'"
 
 | typing_min_put    : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> e :m TRecord ts s \<stileturn> \<Gamma>1'
@@ -179,14 +204,16 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; K \<turnstile> t :\<kappa> k
                        ; D \<in> k \<or> taken
                        ; \<Xi>, K, \<Gamma>2 \<turnstile> e' :m t \<stileturn> \<Gamma>2'
-                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Put e f e' :m TRecord (ts [f := (t,False)]) s \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                       ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Put e f e' :m TRecord (ts [f := (t,False)]) s \<stileturn> \<Gamma>'"
 
 | typing_min_all_empty : "\<Xi>, K, empty n \<turnstile>* [] :m [] \<stileturn> empty n"
 
 | typing_min_all_cons  : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
                           ; \<Xi>, K, \<Gamma>1 \<turnstile>  e  :m t \<stileturn> \<Gamma>1'
                           ; \<Xi>, K, \<Gamma>2 \<turnstile>* es :m ts \<stileturn>  \<Gamma>2'
-                          \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile>* (e # es) :m (t # ts) \<stileturn> merge_ctx K \<Gamma>1' \<Gamma>2'"
+                          ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                          \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile>* (e # es) :m (t # ts) \<stileturn> \<Gamma>'"
 
 
 lemma typing_min_to_kinding:
@@ -237,7 +264,7 @@ proof (induct rule: typing_minimal_typing_minimal_all.inducts)
       "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'3 | \<Gamma>2'"
     using weaken_and_split_bang typing_min_letb
     by meson
-  then have \<Gamma>'_is: "\<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
+  then have \<Gamma>'_is: "Some \<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
     by (simp add: merge_ctx_bang_correct)
 
   then show ?case
@@ -265,10 +292,16 @@ next
   case (typing_fun \<Xi> K' t f u K \<Gamma> ts)
   then show ?case sorry
 next
+  case (typing_app K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> a x y b)
+  then show ?case sorry
+next
+  case (typing_tuple K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> t T u U)
+  then show ?case sorry
+next
   case (typing_split K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t u y t')
   then show ?case sorry
 next
-  case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
+case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
   then show ?case sorry
 next
   case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
@@ -282,6 +315,13 @@ next
 next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t k taken e' u)
   then show ?case sorry
+next
+  case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t taken k e')
+  then show ?case sorry
+next
+  case (typing_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t es ts)
+  then show ?case sorry
+
 qed (blast intro: typing_minimal_typing_minimal_all.intros)+
 
 (*  case (typing_var K \<Gamma> i t \<Xi>)
