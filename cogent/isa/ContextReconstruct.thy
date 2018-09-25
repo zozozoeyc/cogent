@@ -88,7 +88,7 @@ fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Righta
 | "merge_ctx_bang a b [] (v # va) = None" 
 
 
-lemma merge_ctx_bang_correct:
+lemma split_bang_imp_merge_ctx_bang:
   assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
   shows "Some \<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
   using assms
@@ -286,7 +286,7 @@ proof (induct rule: typing_minimal_typing_minimal_all.inducts)
     using weaken_and_split_bang typing_min_letb
     by meson
   then have \<Gamma>'_is: "Some \<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
-    by (simp add: merge_ctx_bang_correct)
+    by (simp add: split_bang_imp_merge_ctx_bang)
 
   then show ?case
     using \<Gamma>'_is weaken_and_split\<Gamma>
@@ -388,10 +388,8 @@ next
       "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
       "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     using minimal_typing_imp_weakening(1) by blast
-  moreover then obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using typing_app weaken_and_split by blast
-  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
-    using split_imp_merge_ctx by fastforce
+  moreover then obtain \<Gamma>' where "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using typing_app weaken_and_split split_imp_merge_ctx by metis
   ultimately show ?case
     by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
@@ -425,40 +423,86 @@ next
       "weakening_comp K (Some u) U"
       "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     by (metis list_all2_Cons1 weakening_def)
-  moreover obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
-    using IHresults ctx2_simps typing_split weaken_and_split
-    by blast
-  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
-    using split_imp_merge_ctx by fastforce
+  moreover obtain \<Gamma>' where "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using typing_split IHresults ctx2_simps weaken_and_split split_imp_merge_ctx
+    by metis
   ultimately show ?case
     by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_let K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u)
-  then show ?case
-    using minimal_typing_preserves_ctx_length
-    sorry
+  moreover then obtain \<Gamma>1' T\<Gamma>2'
+    where IHresults:
+      "\<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, Some t # \<Gamma>2 \<turnstile> y :m u \<stileturn> T\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> Some t # \<Gamma>2 \<leadsto>w T\<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain T \<Gamma>2'
+    where ctx2_simps:
+      "T\<Gamma>2' = T # \<Gamma>2'"
+      "weakening_comp K (Some t) T"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    by (metis list_all2_Cons1 weakening_def)
+  moreover obtain \<Gamma>' where "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using typing_let IHresults ctx2_simps weaken_and_split split_imp_merge_ctx
+    by metis
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t y u k)
-  then show ?case
-    using minimal_typing_preserves_ctx_length
+  moreover then obtain \<Gamma>1' T\<Gamma>2'
+    where IHresults:
+      "\<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, Some t # \<Gamma>2 \<turnstile> y :m u \<stileturn> T\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> Some t # \<Gamma>2 \<leadsto>w T\<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain T \<Gamma>2'
+    where ctx2_simps:
+      "T\<Gamma>2' = T # \<Gamma>2'"
+      "weakening_comp K (Some t) T"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    by (metis list_all2_Cons1 weakening_def)
+  moreover obtain \<Gamma>' isa \<Gamma>1''
+    where
+      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
+      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1''"
+      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'' | \<Gamma>2'"
+    using typing_letb IHresults ctx2_simps weaken_and_split_bang
+    by blast
+  moreover then have "merge_ctx_bang K isa \<Gamma>1'' \<Gamma>2' = Some \<Gamma>'"
+    using split_bang_imp_merge_ctx_bang by fastforce
+  ultimately show ?case
     sorry
 next
   case (typing_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts tag t a u b)
-  then show ?case
-    apply clarsimp
-    apply (rename_tac \<Gamma>1' T\<Gamma>2a T\<Gamma>2b)
-    apply (subgoal_tac "length T\<Gamma>2a = Suc (length \<Gamma>2)")
-    apply (subgoal_tac "length T\<Gamma>2b = Suc (length \<Gamma>2)")
-     apply (clarsimp simp add: length_Suc_conv)
-      apply (rename_tac T Xs \<Gamma>2a' \<Gamma>2b')
-      apply (subgoal_tac "\<Gamma>2a' = \<Gamma>2b'")
+  moreover then obtain \<Gamma>1' T\<Gamma>2a' U\<Gamma>2b'
+    where IHresults:
+      "\<Xi>, K, \<Gamma>1 \<turnstile> x :m TSum ts \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, Some t # \<Gamma>2 \<turnstile> a :m u \<stileturn> T\<Gamma>2a'"
+      "\<Xi>, K, Some (TSum (tagged_list_update tag (t, True) ts)) # \<Gamma>2 \<turnstile> b :m u \<stileturn> U\<Gamma>2b'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> Some t # \<Gamma>2 \<leadsto>w T\<Gamma>2a'"
+      "K \<turnstile> Some (TSum (tagged_list_update tag (t, True) ts)) # \<Gamma>2 \<leadsto>w U\<Gamma>2b'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain T \<Gamma>2a' U \<Gamma>2b'
+    where ctx2_simps:
+      "T\<Gamma>2a' = T # \<Gamma>2a'"
+      "weakening_comp K (Some t) T"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2a'"
+      "U\<Gamma>2b' = U # \<Gamma>2b'"
+      "weakening_comp K (Some (TSum (tagged_list_update tag (t, True) ts))) U"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2b'"
+    by (fastforce simp add: list_all2_Cons1 weakening_def)
+  moreover have "\<Gamma>2a' = \<Gamma>2b'"
     sorry
-(*
-       apply (blast intro: typing_minimal_typing_minimal_all.intros)
-      defer    
-    using minimal_typing_preserves_ctx_length(1) apply (force+)[2]
-    sorry
-*)
+  moreover obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2a'"
+    using typing_case IHresults ctx2_simps weaken_and_split
+    by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2a' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_if K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x a t b)
   then show ?case
@@ -471,13 +515,54 @@ next
     sorry
 next
   case (typing_take K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t k taken e' u)
-  then show ?case sorry
+  moreover then obtain \<Gamma>1' TR\<Gamma>2'
+    where IHresults:
+      "\<Xi>, K, \<Gamma>1 \<turnstile> e :m TRecord ts s \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, Some t # Some (TRecord (ts[f := (t, taken)]) s) # \<Gamma>2 \<turnstile> e' :m u \<stileturn> TR\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> Some t # Some (TRecord (ts[f := (t, taken)]) s) # \<Gamma>2 \<leadsto>w TR\<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain T R \<Gamma>2'
+    where ctx2_simps:
+      "TR\<Gamma>2' = T # R # \<Gamma>2'"
+      "weakening_comp K (Some t) T"
+      "weakening_comp K (Some (TRecord (ts[f := (t, taken)]) s)) R"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    by (fastforce simp add: list_all2_Cons1 weakening_def)
+  moreover then obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    using typing_take IHresults weaken_and_split by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_put K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e ts s f t taken k e')
-  then show ?case sorry
+  moreover then obtain \<Gamma>1' \<Gamma>2'
+    where
+      "\<Xi>, K, \<Gamma>1 \<turnstile> e :m TRecord ts s \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, \<Gamma>2 \<turnstile> e' :m t \<stileturn> \<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    using minimal_typing_imp_weakening(1) by blast
+  moreover then obtain \<Gamma>' where "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>' \<and> K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    using typing_put weaken_and_split by blast
+  moreover then have "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using split_imp_merge_ctx by fastforce
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 next
   case (typing_all_cons K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> e t es ts)
-  then show ?case sorry
+    moreover then obtain \<Gamma>1' \<Gamma>2'
+    where
+      "\<Xi>, K, \<Gamma>1 \<turnstile> e :m t \<stileturn> \<Gamma>1'"
+      "\<Xi>, K, \<Gamma>2 \<turnstile>* es :m ts \<stileturn> \<Gamma>2'"
+      "K \<turnstile> \<Gamma>1 \<leadsto>w \<Gamma>1'"
+      "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
+    using minimal_typing_imp_weakening by fast
+  moreover then obtain \<Gamma>' where "merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'"
+    using typing_all_cons weaken_and_split split_imp_merge_ctx by metis
+  ultimately show ?case
+    by (auto intro: typing_minimal_typing_minimal_all.intros)
 
 qed (blast intro: typing_minimal_typing_minimal_all.intros)+
 
