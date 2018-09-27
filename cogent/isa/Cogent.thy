@@ -1074,8 +1074,8 @@ lemma split_split_ctxs_come_from_input:
   assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
   shows "{t. Some t \<in> set \<Gamma>} = {t. Some t \<in> set \<Gamma>1} \<union> {t. Some t \<in> set \<Gamma>2}"
   using assms
-proof (induct rule: split.inducts)
-  case (split_cons K x a b xs as bs)
+proof (induct rule: split_induct)
+  case (split_cons x xs a as b bs)
   moreover then have
     "x \<noteq> None \<longrightarrow> (x = a \<and> x = b) \<or> (a = None \<and> x = b) \<or> (x = a \<and> b = None)"
     "x = None \<longrightarrow> a = None \<and> b = None"
@@ -1172,7 +1172,7 @@ proof (induct \<Gamma> arbitrary: w\<Gamma> \<Gamma>1 \<Gamma>2)
 next
   case (Cons a \<Gamma>')
   then obtain a1 \<Gamma>1' a2 \<Gamma>2' wa w\<Gamma>'
-    where split_simps:
+    where ctx_simps:
       "\<Gamma>1 = a1 # \<Gamma>1'"
       "\<Gamma>2 = a2 # \<Gamma>2'"
       "w\<Gamma> = wa # w\<Gamma>'"
@@ -1185,7 +1185,7 @@ next
     "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
     "weakening_comp K a wa"
     using Cons.prems
-    by (fastforce elim: split.cases simp add: weakening_def split_simps)+
+    by (fastforce simp add: split_def elim: list_all3.cases simp add: weakening_def ctx_simps)+
   then obtain wa1 wa2
     where weak_of_split_comps:
       "K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
@@ -1207,7 +1207,7 @@ next
     using ih_on_subctxs weak_of_split_comps split_cons weakening_def list.rel_intros(2)
     by metis+
   then show ?case
-    using split_simps by blast
+    using ctx_simps by blast
 qed
 
 
@@ -1225,8 +1225,8 @@ lemma weaken_and_split:
     and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
   shows "\<exists>w\<Gamma>. (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K \<turnstile> w\<Gamma> \<leadsto> w\<Gamma>1 | w\<Gamma>2)"
   using assms
-proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split.inducts)
-  case (split_cons K a a1 a2 \<Gamma> \<Gamma>1 \<Gamma>2)
+proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_induct)
+  case (split_cons a \<Gamma> a1 \<Gamma>1 a2 \<Gamma>2)
 
   obtain wa1 w\<Gamma>1' wa2 w\<Gamma>2'
     where ctx_simps:
@@ -1251,11 +1251,11 @@ proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split.inducts)
     "K \<turnstile> wa # w\<Gamma>' \<leadsto> wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
     "K \<turnstile> a # \<Gamma> \<leadsto>w wa # w\<Gamma>'"
     unfolding weakening_def
-    using split.split_cons weakening_def IHsplitsweakens
-    by blast+
+    using IHsplitsweakens
+    by (simp add: split_def weakening_def)+
   then show ?case
     using ctx_simps by blast
-qed (force simp add: weakening_def intro: split.intros)
+qed (force simp add: weakening_def split_def)
 
 lemma weaken_and_split_bang_comp:
   assumes "K , dobang \<turnstile> a \<leadsto>b a1 \<parallel> a2"

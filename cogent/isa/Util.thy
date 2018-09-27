@@ -247,6 +247,13 @@ lemma option_cases_boolean:
   "((case ox of Some x \<Rightarrow> P x | None \<Rightarrow> Q) = y) = ((\<exists>x. ox = Some x \<and> y = P x) \<or> (ox = None \<and> y = Q))"
   using option.case_eq_if by auto
 
+
+lemma ifthenelse_eq_as_boolean:
+  "(y = (if c then a else b)) = ((c \<and> y = a) \<or> (\<not> c \<and> y = b))"
+  "((if c then a else b) = y) = ((c \<and> y = a) \<or> (\<not> c \<and> y = b))"
+  by auto
+
+
 lemma distinct_fst:
   assumes "distinct (map fst xs)"
     and     "(a, b) \<in> set xs"

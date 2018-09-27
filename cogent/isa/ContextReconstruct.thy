@@ -41,7 +41,7 @@ next
       "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
       "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
     using Cons.prems
-    by (cases rule: split.cases, simp)
+    by (clarsimp simp add: split_def list_all3_Cons1)
   then show ?case
     using Cons.hyps
     by (auto simp add: split_comp.simps option_cases_boolean)
@@ -53,7 +53,9 @@ lemma merge_ctx_comp_imp_split_comp:
 and "merge_ctx_comp K a b = Some c"
 shows "K \<turnstile> c \<leadsto> a \<parallel> b"
   using assms
-  by (cases c; cases a; cases b; simp add: split_comp.simps if_split_eq1; blast)
+  apply (cases rule: merge_ctx_comp.cases[where x="(K, a, b)"])
+     apply (clarsimp simp add: ifthenelse_eq_as_boolean split_comp.simps)+
+  done
 
 lemma merge_ctx_imp_split:
   assumes "\<And>a. Some a \<in> set \<Gamma>1 \<Longrightarrow> K \<turnstile> a wellformed"
@@ -68,7 +70,7 @@ proof (induct arbitrary: \<Gamma> rule: merge_ctx.induct)
   ultimately show ?case
     using split_cons
     by (simp add: option_cases_boolean merge_ctx_comp_imp_split_comp)
-qed (simp add: split.intros)+
+qed (simp add: split_def)+
 
 fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
   "merge_ctx_bang_comp K False optx opty = merge_ctx_comp K optx opty"
