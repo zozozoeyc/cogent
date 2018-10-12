@@ -2,6 +2,255 @@ theory ContextReconstruct
   imports Cogent
 begin
 
+section {* split and weakening rules for minimal contexts *}
+
+text {*
+  These are slightly different from the core rules
+*}
+
+(*
+subsection {* Split Definition *}
+
+inductive split_comp_min :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool"
+          ("_ \<turnstile> _ m\<leadsto> _ \<parallel> _" [30,0,0,20] 60) where
+  none_min  : "K \<turnstile> None m\<leadsto> None \<parallel> None"
+| left_min  : "\<lbrakk> K \<turnstile> t :\<kappa> k         \<rbrakk> \<Longrightarrow> K \<turnstile> Some t m\<leadsto> Some t \<parallel> None"
+| right_min : "\<lbrakk> K \<turnstile> t :\<kappa> k         \<rbrakk> \<Longrightarrow> K \<turnstile> Some t m\<leadsto> None   \<parallel> (Some t)"
+| share_min : "\<lbrakk> K \<turnstile> t :\<kappa> k ; S \<in> k \<rbrakk> \<Longrightarrow> K \<turnstile> Some t m\<leadsto> Some t \<parallel> Some t"
+
+definition split_min :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool" ("_ \<turnstile> _ m\<leadsto> _ | _" [30,0,0,20] 60) where
+  "split_min K \<equiv> list_all3 (split_comp K)"
+
+lemmas split_min_induct[consumes 1, case_names split_empty split_cons, induct set: list_all3]
+ = list_all3_induct[where P="split_comp K" for K, simplified split_def[symmetric]]
+
+lemmas split_min_empty = all3Nil[where P="split_comp K" for K, simplified split_def[symmetric]]
+lemmas split_min_cons = all3Cons[where P="split_comp K" for K, simplified split_def[symmetric]]
+*)
+
+subsection {* Split-bang Definition *}
+
+inductive split_bang_min_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool" ("_ , _ \<turnstile> _ m\<leadsto>b _ \<parallel> _") where
+  none     : "K \<turnstile> x \<leadsto> a \<parallel> b \<Longrightarrow> K , False \<turnstile> x m\<leadsto>b a \<parallel> b"
+| dobang   : "K \<turnstile> t :\<kappa> k \<Longrightarrow> K , True \<turnstile> Some t m\<leadsto>b Some (bang t) \<parallel> Some t"
+| bangdrop : "\<lbrakk> K \<turnstile> t :\<kappa> k ; D \<in> k \<rbrakk> \<Longrightarrow> K , True \<turnstile> Some t m\<leadsto>b Some (bang t) \<parallel> None"
+
+inductive split_bang_min :: "kind env \<Rightarrow> index set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool"  ("_ , _ \<turnstile> _ m\<leadsto>b _ | _" [30,0,0,20] 60) where
+  split_bang_min_empty : "K , is \<turnstile> [] m\<leadsto>b [] | []"
+| split_bang_min_cons  : "\<lbrakk> is' = pred ` Set.remove (0 :: index) is
+                          ; K , is'  \<turnstile> xs m\<leadsto>b as | bs
+                          ; K, (0 \<in> is) \<turnstile> x m\<leadsto>b a \<parallel> b
+                          \<rbrakk> \<Longrightarrow> K , is \<turnstile> x # xs m\<leadsto>b a # as | b # bs"
+
+(*
+subsection {* Weakening Definition *}
+
+inductive weakening_comp_min :: "kind env \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> bool" where
+  none : "weakening_comp_min K None None"
+| keep : "\<lbrakk> K \<turnstile> t :\<kappa> k \<rbrakk>         \<Longrightarrow> weakening_comp_min K (Some t) (Some t)"
+| drop : "\<lbrakk> K \<turnstile> t :\<kappa> k ; D \<in> k \<rbrakk> \<Longrightarrow> weakening_comp_min K (Some t) None"
+
+definition weakening_min :: "kind env \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> bool" ("_ \<turnstile> _ m\<leadsto>w _" [30,0,20] 60) where
+  "weakening_min K \<equiv> list_all2 (weakening_comp_min K)"
+*)
+
+section {* Lemmas about split and weakening *}
+
+lemma split_bang_into_split_bang_min:
+  "K , is \<turnstile> a \<leadsto>b a1 \<parallel> a2 \<Longrightarrow> K , is \<turnstile> a m\<leadsto>b a1 \<parallel> a2"
+  by (force elim: split_bang_comp.cases intro: split_bang_min_comp.intros)
+
+(* n.b. these will eventually be between core and min-ctx definitions *)
+
+lemma split_weaken_comp:
+  assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    and "weakening_comp K a wa"
+  shows "\<exists>wa1 wa2. (K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2) \<and> (weakening_comp K a1 wa1) \<and> (weakening_comp K a2 wa2)"
+  using assms
+  apply (cases a1)
+   apply (fastforce simp add: split_comp.simps weakening_comp.simps)
+  apply (cases a2)
+   apply (fastforce simp add: split_comp.simps weakening_comp.simps)
+  apply (clarsimp simp add: split_comp.simps weakening_comp.simps, blast)
+  done
+
+lemma split_weaken:
+  assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+    and "K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>"
+  shows "\<exists>w\<Gamma>1 w\<Gamma>2. (K \<turnstile> w\<Gamma> \<leadsto> w\<Gamma>1 | w\<Gamma>2) \<and> (K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1) \<and> (K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2)"
+  using assms
+proof (induct \<Gamma> arbitrary: w\<Gamma> \<Gamma>1 \<Gamma>2)
+  case Nil
+  then show ?case
+    using split_length weakening_length by fastforce
+next
+  case (Cons a \<Gamma>')
+  then obtain a1 \<Gamma>1' a2 \<Gamma>2' wa w\<Gamma>'
+    where ctx_simps:
+      "\<Gamma>1 = a1 # \<Gamma>1'"
+      "\<Gamma>2 = a2 # \<Gamma>2'"
+      "w\<Gamma> = wa # w\<Gamma>'"
+    using weakening_def split_length
+    by (metis list.rel_distinct(2) length_0_conv neq_Nil_conv)
+
+  have prems_elims:
+    "K \<turnstile> \<Gamma>' \<leadsto> \<Gamma>1' | \<Gamma>2'"
+    "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
+    "weakening_comp K a wa"
+    using Cons.prems
+    by (fastforce simp add: split_def elim: list_all3.cases simp add: weakening_def ctx_simps)+
+  then obtain wa1 wa2
+    where weak_of_split_comps:
+      "K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+      "weakening_comp K a1 wa1"
+      "weakening_comp K a2 wa2"
+    using split_weaken_comp by blast
+
+  obtain w\<Gamma>1' w\<Gamma>2'
+    where ih_on_subctxs:
+      "K \<turnstile> w\<Gamma>' \<leadsto> w\<Gamma>1' | w\<Gamma>2'"
+      "K \<turnstile> \<Gamma>1' \<leadsto>w w\<Gamma>1'"
+      "K \<turnstile> \<Gamma>2' \<leadsto>w w\<Gamma>2'"
+    using prems_elims Cons.hyps weakening_def split_cons prems_elims
+    by blast
+
+  have "K \<turnstile> wa # w\<Gamma>' \<leadsto> wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
+    and "K \<turnstile> a1 # \<Gamma>1' \<leadsto>w wa1 # w\<Gamma>1'"
+    and "K \<turnstile> a2 # \<Gamma>2' \<leadsto>w wa2 # w\<Gamma>2'"
+    using ih_on_subctxs weak_of_split_comps split_cons weakening_def list.rel_intros(2)
+    by metis+
+  then show ?case
+    using ctx_simps by blast
+qed
+
+
+lemma weaken_and_split_comp:
+  assumes "K \<turnstile> a \<leadsto> a1 \<parallel> a2"
+    and "weakening_comp K a1 wa1"
+    and "weakening_comp K a2 wa2"
+  shows "\<exists>wa. weakening_comp K a wa \<and> K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+  using assms
+  by (fastforce simp add: split_comp.simps weakening_comp.simps)
+
+lemma weaken_and_split:
+  assumes "K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2"
+    and "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1"
+    and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
+  shows "\<exists>w\<Gamma>. (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K \<turnstile> w\<Gamma> \<leadsto> w\<Gamma>1 | w\<Gamma>2)"
+  using assms
+proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 rule: split_induct)
+  case (split_cons a \<Gamma> a1 \<Gamma>1 a2 \<Gamma>2)
+
+  obtain wa1 w\<Gamma>1' wa2 w\<Gamma>2'
+    where ctx_simps:
+      "w\<Gamma>1 = wa1 # w\<Gamma>1'"
+      "w\<Gamma>2 = wa2 # w\<Gamma>2'"
+    by (metis split_cons.prems list_all2_Cons1 weakening_def)
+  have subweakenings:
+    "weakening_comp K a1 wa1"
+    "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1'"
+    "weakening_comp K a2 wa2"
+    "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2'"
+    by (metis ctx_simps list.rel_inject(2) split_cons.prems weakening_def)+
+  then obtain w\<Gamma>' wa
+    where IHsplitsweakens:
+      "K \<turnstile> wa \<leadsto> wa1 \<parallel> wa2"
+      "K \<turnstile> w\<Gamma>' \<leadsto> w\<Gamma>1'| w\<Gamma>2'"
+      "weakening_comp K a wa"
+      "K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>'"
+    using split_cons.hyps weaken_and_split_comp
+    by blast
+  then have
+    "K \<turnstile> wa # w\<Gamma>' \<leadsto> wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
+    "K \<turnstile> a # \<Gamma> \<leadsto>w wa # w\<Gamma>'"
+    unfolding weakening_def
+    using IHsplitsweakens
+    by (simp add: split_def weakening_def)+
+  then show ?case
+    using ctx_simps by blast
+qed (force simp add: weakening_def split_def)
+
+lemma weaken_and_split_bang_comp:
+  assumes "K , dobang \<turnstile> a \<leadsto>b a1 \<parallel> a2"
+    and "weakening_comp K a1 wa1"
+    and "weakening_comp K a2 wa2"
+  shows "\<exists>wa dobang. (weakening_comp K a wa) \<and> (K , dobang \<turnstile> wa m\<leadsto>b wa1 \<parallel> wa2)"
+  using assms
+proof (cases rule: split_bang_comp.cases)
+  case none
+  then show ?thesis
+    using assms
+    apply -
+    apply (erule split_comp.cases)
+       apply (fastforce simp add: split_comp.simps weakening_comp.simps split_bang_min_comp.simps)
+      apply clarsimp
+      apply (cases wa1)
+       apply (auto simp add: weakening_comp.simps split_bang_min_comp.simps split_comp.simps)[1]
+      apply (clarsimp simp add: weakening_comp.simps split_bang_min_comp.simps split_comp.simps, meson)
+     apply (cases wa2)
+      apply (auto simp add: weakening_comp.simps split_bang_min_comp.simps split_comp.simps)[2]
+    apply (cases wa1; cases wa2)
+       apply (auto simp add: weakening_comp.simps split_bang_min_comp.simps split_comp.simps)[4]
+    done
+next
+  case (dobang x)
+  then show ?thesis
+    using assms
+    by (cases wa1; cases wa2;
+            (clarsimp simp add: weakening_comp.simps split_bang_min_comp.simps split_comp.simps, auto))
+qed
+
+
+lemma weaken_and_split_bang:
+  assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
+    and "K \<turnstile> \<Gamma>1 \<leadsto>w w\<Gamma>1"
+    and "K \<turnstile> \<Gamma>2 \<leadsto>w w\<Gamma>2"
+  shows "\<exists>w\<Gamma> is. (K \<turnstile> \<Gamma> \<leadsto>w w\<Gamma>) \<and> (K , is \<turnstile> w\<Gamma> m\<leadsto>b w\<Gamma>1 | w\<Gamma>2)"
+  using assms
+proof (induct arbitrary: w\<Gamma>1 w\<Gamma>2 "is" rule: split_bang.inducts)
+  case (split_bang_cons is' "is" K \<Gamma>' \<Gamma>1' \<Gamma>2' a a1 a2)
+
+  obtain w\<Gamma>1' w\<Gamma>2' wa1 wa2
+    where ctx_simps:
+      "w\<Gamma>1 = wa1 # w\<Gamma>1'"
+      "w\<Gamma>2 = wa2 # w\<Gamma>2'"
+    using split_bang_cons.prems
+    by (fastforce simp add: list_all2_Cons1 weakening_def)
+  then have subweakenings:
+    "weakening_comp K a1 wa1"
+    "weakening_comp K a2 wa2"
+    "K \<turnstile> \<Gamma>1' \<leadsto>w w\<Gamma>1'"
+    "K \<turnstile> \<Gamma>2' \<leadsto>w w\<Gamma>2'"
+    using split_bang_cons.prems weakening_nth
+    by (fastforce simp add: weakening_def)+
+
+  obtain w\<Gamma>' isa
+    where IHresults:
+      "K \<turnstile> \<Gamma>' \<leadsto>w w\<Gamma>'"
+      "K , isa \<turnstile> w\<Gamma>' m\<leadsto>b w\<Gamma>1' | w\<Gamma>2'"
+    using split_bang_cons.hyps(3) subweakenings by blast
+
+  obtain wa dobang
+    where weaken_split_bang_step:
+      "weakening_comp K a wa"
+      "K , dobang \<turnstile> wa m\<leadsto>b wa1 \<parallel> wa2"
+    using split_bang_cons.hyps subweakenings weaken_and_split_bang_comp
+    by blast
+
+  have
+    "K \<turnstile> a # \<Gamma>' \<leadsto>w wa # w\<Gamma>'"
+    using weaken_split_bang_step IHresults
+    by (simp add: weakening_def)
+  moreover have "K , (if dobang then insert 0 (Suc ` isa) else Suc ` isa) \<turnstile> wa # w\<Gamma>' m\<leadsto>b wa1 # w\<Gamma>1' | wa2 # w\<Gamma>2'"
+    using IHresults weaken_split_bang_step
+    by (fastforce intro: split_bang_min.intros simp add: remove_def zero_notin_Suc_image set_pred_left_inverse_suc)
+  ultimately show ?case
+    using ctx_simps by fast
+qed (simp add: split_bang_min_empty weakening_def)
+
+
+
 section {* Functions for merging split contexts *}
 
 (* The inner layer of option is whether the type is present in the context.
@@ -72,32 +321,39 @@ proof (induct arbitrary: \<Gamma> rule: merge_ctx.induct)
     by (simp add: option_cases_boolean merge_ctx_comp_imp_split_comp)
 qed (simp add: split_def)+
 
+
 fun merge_ctx_bang_comp :: "kind env \<Rightarrow> bool \<Rightarrow> type option \<Rightarrow> type option \<Rightarrow> type option option" where
-  "merge_ctx_bang_comp K False optx opty = merge_ctx_comp K optx opty"
-| "merge_ctx_bang_comp K True (Some x) (Some y) = (if x = bang y then Some (Some y) else None)"
-| "merge_ctx_bang_comp _ True None _    = None"
-| "merge_ctx_bang_comp _ True _    None = None"
+  "merge_ctx_bang_comp K False optx     opty     = merge_ctx_comp K optx opty"
+| "merge_ctx_bang_comp K True  (Some x) (Some y) = (if x = bang y \<and> (\<exists>k. K \<turnstile> y :\<kappa> k) then Some (Some y) else None)"
+| "merge_ctx_bang_comp K True  (Some x) None     = (SOME t'. (\<exists>t. t' = Some (Some t) \<and> x = bang t \<and> (\<exists>k. (K \<turnstile> t :\<kappa> k) \<and> D \<in> k)) \<or> t' = None)" (* TODO bad! *)
+| "merge_ctx_bang_comp _ _         _        _    = None"
 
 fun merge_ctx_bang :: "kind env \<Rightarrow> nat set \<Rightarrow> ctx \<Rightarrow> ctx \<Rightarrow> ctx option" where
   "merge_ctx_bang K is [] [] = Some []"
 | "merge_ctx_bang K is (optx # \<Gamma>1) (opty # \<Gamma>2) = (let is' = pred ` Set.remove (0 :: index) is
                                                       in (case merge_ctx_bang_comp K (0 \<in> is) optx opty of
-                                                            Some a \<Rightarrow> (case merge_ctx_bang K is' \<Gamma>1 \<Gamma>2 of
-                                                                         Some rest \<Rightarrow> Some (a # rest)
-                                                                       | None \<Rightarrow> None)
-                                                          | None \<Rightarrow> None))"
-| "merge_ctx_bang a b (v # va) [] = None"
-| "merge_ctx_bang a b [] (v # va) = None" 
+                                                        Some a \<Rightarrow> (case merge_ctx_bang K is' \<Gamma>1 \<Gamma>2 of
+                                                                     Some rest \<Rightarrow> Some (a # rest)
+                                                                   | None \<Rightarrow> None)
+                                                      | None \<Rightarrow> None))"
+| "merge_ctx_bang _ _ (v # va) [] = None"
+| "merge_ctx_bang _ _ [] (v # va) = None" 
 
 
 lemma split_bang_imp_merge_ctx_bang:
-  assumes "K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2"
+  assumes "K , is \<turnstile> \<Gamma> m\<leadsto>b \<Gamma>1 | \<Gamma>2"
   shows "Some \<Gamma> = merge_ctx_bang K is \<Gamma>1 \<Gamma>2"
   using assms
-proof (induct rule: split_bang.inducts)
-  case (split_bang_cons is' "is" K xs as bs x a b)
+proof (induct rule: split_bang_min.inducts)
+  case (split_bang_min_cons is' "is" K xs as bs x a b)
   then show ?case
-    by (cases "0 \<in> is"; auto simp: split_comp.simps split_bang_comp.simps option_cases_boolean)
+    apply (cases "0 \<notin> is")
+     apply (auto simp: split_comp.simps split_bang_min_comp.simps option_cases_boolean)[1]
+    apply (clarsimp simp add: split_comp.simps split_bang_min_comp.simps option_cases_boolean)
+    apply (cases b; clarsimp)
+    apply (intro some_equality, fast)
+    apply (erule disjE; clarsimp)
+    sorry
 qed simp+
 
 
@@ -162,12 +418,13 @@ inductive typing_minimal :: "('f \<Rightarrow> poly_type) \<Rightarrow> kind env
                        ; merge_ctx K \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> Let x y :m u \<stileturn> \<Gamma>'"
 
-| typing_min_letb   : "\<lbrakk> split_bang K is \<Gamma> \<Gamma>1 \<Gamma>2
+| typing_min_letb   : "\<lbrakk> K , is \<turnstile> \<Gamma> \<leadsto>b \<Gamma>1 | \<Gamma>2
                        ; \<Xi>, K, \<Gamma>1 \<turnstile> x :m t \<stileturn> \<Gamma>1'
                        ; \<Xi>, K, (Some t # \<Gamma>2) \<turnstile> y :m u \<stileturn> T' # \<Gamma>2'
                        ; K \<turnstile> t :\<kappa> k
                        ; E \<in> k
-                       ; merge_ctx_bang K is \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
+                       ; isa \<subseteq> is
+                       ; merge_ctx_bang K isa \<Gamma>1' \<Gamma>2' = Some \<Gamma>'
                        \<rbrakk> \<Longrightarrow> \<Xi>, K, \<Gamma> \<turnstile> LetBang is x y :m u \<stileturn> \<Gamma>'"
 
 | typing_min_case   : "\<lbrakk> K \<turnstile> \<Gamma> \<leadsto> \<Gamma>1 | \<Gamma>2
@@ -274,25 +531,26 @@ lemma minimal_typing_imp_weakening:
   shows "\<Xi>, K, \<Gamma> \<turnstile> e :m t \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
     and "\<Xi>, K, \<Gamma> \<turnstile>* es :m ts \<stileturn> \<Gamma>' \<Longrightarrow> K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
 proof (induct rule: typing_minimal_typing_minimal_all.inducts)
-  case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k)
+  case (typing_min_letb K "is" \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x t \<Gamma>1' y u T' \<Gamma>2' k isa \<Gamma>')
 
   have weaken_\<Gamma>2:
     "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     using typing_min_letb
     by (simp add: weakening_def)
-  then obtain \<Gamma>' isa \<Gamma>1'3
+  then obtain \<Gamma>'' isb \<Gamma>1'3
     where weaken_and_split\<Gamma>:
-      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1'3"
-      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'3 | \<Gamma>2'"
+      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>''"
+      "K , isb \<turnstile> \<Gamma>'' m\<leadsto>b \<Gamma>1' | \<Gamma>2'"
     using weaken_and_split_bang typing_min_letb
     by meson
-  then have \<Gamma>'_is: "Some \<Gamma>' = merge_ctx_bang K isa \<Gamma>1'3 \<Gamma>2'"
+  moreover then have "merge_ctx_bang K isb \<Gamma>1' \<Gamma>2' = Some \<Gamma>''"
     by (simp add: split_bang_imp_merge_ctx_bang)
-
-  then show ?case
-    using \<Gamma>'_is weaken_and_split\<Gamma>
+  moreover then have "\<Gamma>'' = \<Gamma>'"
+    using typing_min_letb.hyps(8-9)
     sorry
+  ultimately show ?case
+    using weaken_and_split\<Gamma> typing_min_letb
+    by simp
 next
   case (typing_min_all_empty \<Xi> K n)
   then show ?case
@@ -465,16 +723,17 @@ next
       "weakening_comp K (Some t) T"
       "K \<turnstile> \<Gamma>2 \<leadsto>w \<Gamma>2'"
     by (metis list_all2_Cons1 weakening_def)
-  moreover obtain \<Gamma>' isa \<Gamma>1''
-    where
-      "K \<turnstile> \<Gamma> \<leadsto>w \<Gamma>'"
-      "K \<turnstile> \<Gamma>1' \<leadsto>w \<Gamma>1''"
-      "K , isa \<turnstile> \<Gamma>' \<leadsto>b \<Gamma>1'' | \<Gamma>2'"
-    using typing_letb IHresults ctx2_simps weaken_and_split_bang
-    by blast
-  moreover then have "merge_ctx_bang K isa \<Gamma>1'' \<Gamma>2' = Some \<Gamma>'"
-    using split_bang_imp_merge_ctx_bang by fastforce
   ultimately show ?case
+    apply clarsimp
+    apply (rename_tac G1 G2)
+    apply (rule exI)
+    apply (rule)
+          apply simp
+         apply simp
+        apply simp
+       apply simp
+      apply simp
+     apply (clarsimp simp add: weakening_cons)
     sorry
 next
   case (typing_case K \<Gamma> \<Gamma>1 \<Gamma>2 \<Xi> x ts tag t a u b)
