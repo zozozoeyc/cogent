@@ -41,7 +41,8 @@ import Cogent.Isabelle.IsabelleName
 
 import Cogent.Normal as N (freshVarPrefix)
 import Cogent.Util (NameMod, Stage(..), Warning)
-import Data.Nat (Nat(Zero,Suc))
+import Data.Fin
+import Data.Nat (Nat(..))
 import Data.Vec as Vec
 
 import Isabelle.ExprTH

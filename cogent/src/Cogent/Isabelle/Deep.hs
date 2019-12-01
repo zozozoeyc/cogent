@@ -20,16 +20,17 @@ import Cogent.Common.Syntax as CS
 import Cogent.Common.Types
 import Cogent.Compiler
 import Cogent.Core as CC
+import Cogent.Isabelle.IsabelleName
 import Cogent.Isabelle.Shallow (snm)
 import Cogent.Util (NameMod, Stage(..))
-import Data.List (intercalate, sort, sortOn)
-import qualified Data.Map.Strict as Map
-import Data.Vec (cvtToList, Fin, finInt)
+import Data.Fin (Fin, finInt)
+import Data.Vec (cvtToList)
 import Isabelle.ExprTH
 import Isabelle.InnerAST as I
 import Isabelle.OuterAST as O
-import Cogent.Isabelle.IsabelleName
 
+import qualified Data.Map.Strict as Map
+import Data.List (intercalate, sort, sortOn)
 #if __GLASGOW_HASKELL__ >= 709
 import Prelude hiding ((<$>))
 #endif

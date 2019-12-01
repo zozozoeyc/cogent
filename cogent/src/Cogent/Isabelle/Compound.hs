@@ -29,13 +29,14 @@ module Cogent.Isabelle.Compound
 import Cogent.Common.Syntax
 import Cogent.Core
 import Cogent.Util (firstM, secondM)
+import Data.Fin
+import Data.Nat
+import Data.Vec
 
 import Control.Applicative
 import qualified Data.Map as M
 import Data.Maybe
 import Prelude as P
-import Data.Nat
-import Data.Vec
 
 -- | Try to flatten a nested case into a map of alternatives
 --

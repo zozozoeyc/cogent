@@ -41,6 +41,7 @@ import qualified Cogent.Surface as S
 import Cogent.TypeCheck.Base as B
 import Cogent.Util
 import Data.Ex
+import Data.Fin
 import Data.Nat
 import Data.PropEq ((:=:)(Refl))
 import Data.Vec as Vec

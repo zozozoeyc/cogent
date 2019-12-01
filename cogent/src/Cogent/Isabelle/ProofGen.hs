@@ -29,7 +29,8 @@ import Cogent.Isabelle.Deep
 import Cogent.PrettyPrint
 import Cogent.Util
 import Data.LeafTree
-import Data.Nat (Nat(Zero, Suc), SNat(SZero, SSuc))
+import Data.Fin
+import Data.Nat (Nat(..), SNat(..))
 import qualified Data.Nat as Nat
 import Data.Vec hiding (splitAt, length, zipWith, zip, unzip)
 import qualified Data.Vec as Vec
@@ -52,7 +53,7 @@ deriving instance Show (SomeDType t)
 type Xi a = [Definition TypedExpr a]
 data EnvExpr t v a = EE { eexprType :: DType t v VarName
                         , eexprExpr :: Expr t v a EnvExpr
-                        , eexprEnv  :: Vec v (Maybe (DType t v VarName))
+                        , eexprEnv  :: Vec v (Maybe (SomeDType t))
                         } deriving (Show)
 
 instance Functor (EnvExpr t v) where
@@ -214,9 +215,9 @@ wellformedHint :: Vec t Kind -> DType t v VarName -> State TypingSubproofs (Leaf
 wellformedHint k t = (pure . KindingTacs) `fmap` wellformed k t
 
 follow_tt :: Vec t Kind
-          -> Vec v  (Maybe (DType t v  VarName))
-          -> Vec vx (Maybe (DType t vx VarName))
-          -> Vec vy (Maybe (DType t vy VarName))
+          -> Vec v  (Maybe (SomeDType t))
+          -> Vec vx (Maybe (SomeDType t))
+          -> Vec vy (Maybe (SomeDType t))
           -> State TypingSubproofs (LeafTree Hints)
 follow_tt k env env_x env_y = hintListSequence $ map (kindingHint k) new
   where
@@ -481,11 +482,11 @@ typing xi k _ = error "attempted to generate proof of ill-typed program"
 
 typingAll :: Xi VarName
           -> Vec t Kind
-          -> Vec v (Maybe (DType t v VarName))
+          -> Vec v (Maybe (SomeDType t))
           -> [EnvExpr t v VarName]
           -> State TypingSubproofs [Tactic]
 -- Γ = empty n ⟹  Ξ, K, Γ ⊢* [] : []
-typingAll xi k g [] = return [rule_tac "typing_all_empty'" [("n", show . Nat.toInt . Vec.length $ g)],
+typingAll xi k g [] = return [rule_tac "typing_all_empty'" [("n", show . Nat.toInt . Vec.length g)],
                               simp_add ["empty_def"]]
 -- Ξ, K, Γ ⊢* (e # es) : (t # ts)
 typingAll xi k g (e:es) =
@@ -647,17 +648,17 @@ allKindCorrect' _ [] Nil = return []
 allKindCorrect' _ _ _ = error "kind mismatch"
 
 splits :: Vec t Kind
-       -> Vec n (Maybe (DType t v VarName))
-       -> Vec n (Maybe (DType t v VarName))
-       -> Vec n (Maybe (DType t v VarName))
+       -> Vec v (Maybe (SomeDType t))
+       -> Vec v (Maybe (SomeDType t))
+       -> Vec v (Maybe (SomeDType t))
        -> State TypingSubproofs [Tactic]
 splits k g g1 g2 = (:[]) . SplitsTac <$> splitsHint False k g g1 g2
 
 splitsHint :: Bool
            -> Vec t Kind
-           -> Vec n (Maybe (DType t v VarName))
-           -> Vec n (Maybe (DType t v VarName))
-           -> Vec n (Maybe (DType t v VarName))
+           -> Vec v (Maybe (SomeDType t))
+           -> Vec v (Maybe (SomeDType t))
+           -> Vec v (Maybe (SomeDType t))
            -> State TypingSubproofs [MLOption [Tactic]]
 splitsHint b k (Cons Nothing gs) (Cons Nothing xs) (Cons Nothing ys) =
   if b then splitsHint b k gs xs ys else (NONE :) <$> splitsHint True k gs xs ys
@@ -668,14 +669,17 @@ splitsHint _ _ _ _ _ = __ghc_t4139 "ProofGen.splitsHint"
 #endif
 
 splitHint :: Vec t Kind
-          -> Maybe (DType t v VarName)
-          -> Maybe (DType t v VarName)
-          -> Maybe (DType t v VarName)
+          -> Maybe (SomeDType t)
+          -> Maybe (SomeDType t)
+          -> Maybe (SomeDType t)
           -> State TypingSubproofs (MLOption [Tactic])
 splitHint k Nothing  Nothing  Nothing  = __impossible "splitHint got case none"
-splitHint k (Just t) (Just _) Nothing  = (\wf -> SOME $ rule "split_comp.left" : wf) <$> wellformed k t
-splitHint k (Just t) Nothing  (Just _) = (\wf -> SOME $ rule "split_comp.right" : wf) <$> wellformed k t
-splitHint k (Just t) (Just _) (Just _) = (\wf -> SOME $ rule "split_comp.share" : wf) <$> kinding k t
+splitHint k (Just t) (Just _) Nothing  = (\wf -> SOME $ rule "split_comp.left" : wf) <$> wellformed k t'
+  where t' = case t of SomeDType t' -> t'
+splitHint k (Just t) Nothing  (Just _) = (\wf -> SOME $ rule "split_comp.right" : wf) <$> wellformed k t'
+  where t' = case t of SomeDType t' -> t'
+splitHint k (Just t) (Just _) (Just _) = (\wf -> SOME $ rule "split_comp.share" : wf) <$> kinding k t'
+  where t' = case t of SomeDType t' -> t'
 splitHint k g x y = error $ "bad split: " ++ show (g, x, y)
 
 ttsplit_bang :: Vec t Kind -> Int -> [Int] -> Vec n (Maybe (DType t v VarName))

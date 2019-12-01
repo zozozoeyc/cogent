@@ -49,6 +49,7 @@ import Cogent.Dargent.Allocation (BitRange)
 import Cogent.Dargent.Core
 import Cogent.PrettyPrint hiding (associativity, primop)
 import Cogent.Util
+import Data.Fin
 import Data.Nat (Nat(Zero, Suc))
 import qualified Data.Nat as Nat
 import Data.Vec hiding (splitAt, length, zipWith, zip, unzip)
@@ -64,20 +65,20 @@ import Data.Traversable(traverse)
 import Text.PrettyPrint.ANSI.Leijen as L hiding (tupled, indent, (<$>))
 import qualified Text.PrettyPrint.ANSI.Leijen as L ((<$>))
 
-data Type t v a e
+data Type t a
   = TVar (Fin t)
   | TVarBang (Fin t)
-  | TCon TypeName [Type t v a e] (Sigil ()) -- Layout will be nothing for abstract types
-  | TFun (Type t v a e) (Type t v a e)
+  | TCon TypeName [Type t a] (Sigil ()) -- Layout will be nothing for abstract types
+  | TFun (Type t a) (Type t a)
   | TPrim PrimInt
   | TString
-  | TSum [(TagName, (Type t v a e, Bool))]  -- True means taken (since 2.0.4)
-  | TProduct (Type t v a e) (Type t v a e)
-  | TRecord [(FieldName, (Type t v a e, Bool))] (Sigil (DataLayout BitRange))
+  | TSum [(TagName, (Type t a, Bool))]  -- True means taken (since 2.0.4)
+  | TProduct (Type t a) (Type t a)
+  | TRecord [(FieldName, (Type t a, Bool))] (Sigil (DataLayout BitRange))
     -- True means taken, Layout will be nothing for abstract types
   | TUnit
 #ifdef BUILTIN_ARRAYS
-  | TArray (Type t v a e) ArraySize (Sigil (DataLayout BitRange)) (Maybe (e t v a))  -- the hole
+  | TArray (Type t a) ArraySize (Sigil (DataLayout BitRange)) (Maybe (LExpr t a))  -- the hole
                  -- \ ^^^ use Int for now
     -- XXX | ^^^ (UntypedExpr t 'Zero VarName)  -- stick to UntypedExpr to be simple / zilinc
     -- The sigil specifies the layout of the element
@@ -86,15 +87,15 @@ data Type t v a e
 
 data SupposedlyMonoType a = forall (t :: Nat) (v :: Nat). SMT (DType t v a)
 
-isTVar :: Type t v a e -> Bool
+isTVar :: Type t a -> Bool
 isTVar (TVar _) = True
 isTVar _ = False
 
-isTFun :: Type t v a e -> Bool
+isTFun :: Type t a -> Bool
 isTFun (TFun {}) = True
 isTFun _ = False
 
-isUnboxed :: Type t v a e -> Bool
+isUnboxed :: Type t a -> Bool
 isUnboxed (TCon _ _ Unboxed) = True
 isUnboxed (TRecord _ Unboxed) =  True
 #ifdef BUILTIN_ARRAYS
@@ -107,10 +108,10 @@ data FunNote = NoInline | InlineMe | MacroCall | InlinePlease  -- order is impor
 
 data Expr t v a e
   = Variable (Fin v, a)
-  | Fun CoreFunName [DType t v a] FunNote  -- here do we want to keep partial application and infer again? / zilinc
+  | Fun CoreFunName [Type t a] FunNote  -- here do we want to keep partial application and infer again? / zilinc
   | Op Op [e t v a]
   | App (e t v a) (e t v a)
-  | Con TagName (e t v a) (DType t v a)
+  | Con TagName (e t v a) (Type t a)
   | Unit
   | ILit Integer PrimInt
   | SLit String
@@ -136,8 +137,8 @@ data Expr t v a e
   | Take (a, a) (e t v a) FieldIndex (e t ('Suc ('Suc v)) a)
      -- \ ^^^ The first is the record, and the second is the taken field
   | Put (e t v a) FieldIndex (e t v a)
-  | Promote (DType t v a) (e t v a)  -- only for guiding the tc. rep. unchanged.
-  | Cast (DType t v a) (e t v a)  -- only for integer casts. rep. changed
+  | Promote (Type t a) (e t v a)  -- only for guiding the tc. rep. unchanged.
+  | Cast (Type t a) (e t v a)  -- only for integer casts. rep. changed
 deriving instance (Show a, Show (e t v a), Show (e t ('Suc v) a), Show (e t ('Suc ('Suc v)) a))
   => Show (Expr t v a e)
 deriving instance (Eq a, Eq (e t v a), Eq (e t ('Suc v) a), Eq (e t ('Suc ('Suc v)) a))
@@ -145,6 +146,12 @@ deriving instance (Eq a, Eq (e t v a), Eq (e t ('Suc v) a), Eq (e t ('Suc ('Suc 
 deriving instance (Ord a, Ord (e t v a), Ord (e t ('Suc v) a), Ord (e t ('Suc ('Suc v)) a))
   => Ord (Expr t v a e)
   -- constraint no smaller than header, thus UndecidableInstances
+
+data LExpr t a
+  = LVariable (Int, a)
+  | LFun CoreFunName [Type t a] FunNote
+  | LOp Op [LExpr t a]
+  | ...
 
 type DType t v a = Type t v a UntypedExpr
 

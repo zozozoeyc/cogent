@@ -41,6 +41,7 @@ import Cogent.Compiler
 import Cogent.Core
 import Cogent.Util
 import Data.Ex
+import Data.Fin
 import Data.Nat
 import Data.PropEq
 import Data.Vec hiding (repeat, splitAt, length, zipWith, zip, unzip)
